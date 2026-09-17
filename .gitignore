@@ -1,0 +1,50 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ===== 가상환경 =====
+.venv/
+venv/
+**/.venv/
+**/venv/
+
+# ===== 로그 =====
+*.log
+
+# ===== 비밀값 (절대 커밋 금지) =====
+.env
+*.key
+**/secret*
+**/*api_key*
+
+# ===== 에디터 =====
+.vscode/
+.idea/
+
+# ===== 자동 생성 실행 스크립트 =====
+run_handtracking.sh
+
+# ===== 압축 잔파일 (재유입 방지) =====
+*.tar.gz
+*.tar.gz.part-*
+
+# ===== 포트폴리오 추출 산출물 / AI 작성 문서 (개인용, 저장소 공용 아님) =====
+PORTFOLIO_EXTRACTION_GUIDE.md
+PORTFOLIO_MAP.md
+PORTFOLIO_SOURCE.md
+SKILL_INVENTORY.md
+CLAUDE.md
+
+# ===== 백업/임시 잔파일 =====
+*.bak
+*.orig
+*~
+.DS_Store
+
+# ===== 대용량 시뮬 에셋 (압축·분할로 관리) =====
+# operating 씬 폴더(274MB, 내부에 100MB 초과 usd 포함)는 git 에 직접 올리지 않고
+# scene_operating.zip.part-* (95MB 조각) 으로 분할해 커밋한다.
+# 클론 후 복원은 README "에셋 복원(필수)" 참고.
+gripper_technique_test/Collected_full_scene_operating/
+gripper_technique_test/scene_operating.zip

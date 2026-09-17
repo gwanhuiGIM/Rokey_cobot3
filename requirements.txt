@@ -1,0 +1,91 @@
+# =============================================================================
+#  surgical_robot_main — 의존성 명세 (MASTER)
+#  ※ 설치/실행 방법은 README.md 4~5장 참고. 이 파일은 "무엇에 의존하는지"만 정리.
+# =============================================================================
+#
+#  의존성 구성 (출처가 4갈래로 나뉜다):
+#    (1) pip        → 아래 목록.  시스템 venv(--system-site-packages) 에 설치.
+#    (2) 시스템 ROS2 → rclpy / std_msgs / geometry_msgs / sensor_msgs / cv_bridge
+#                      pip 아님. /opt/ros/humble 제공. venv 에서 자동으로 보임.
+#    (3) Isaac Sim  → isaacsim.* / omni.* / pxr / torch  (gripper 모듈 전용)
+#                      pip 아님. Isaac 번들. python.sh 로 실행해야 import.
+#    (4) cuRobo     → gripper 모듈 전용. Isaac Python 에 v0.7.8 로 설치
+#                      (./install_curobo.sh). pip 목록 아님.
+#
+#  검증 환경:
+#    Ubuntu 22.04 / ROS2 Humble / RTX 5080(드라이버 580)
+#    시스템 Python 3.10.12  ← 아래 pip 목록 (handtracking/vision/voicellm/dashboard)
+#    Isaac Sim 5.1 = Python 3.11.13 / torch 2.7.0+cu128 / cuRobo 0.7.8  ← gripper
+#
+#  ★ torch 는 반드시 cu128. RTX 5080(Blackwell) 은 cu121 이하에서 동작하지 않음.
+#    설치 시: pip install torch --index-url https://download.pytorch.org/whl/cu128
+# =============================================================================
+
+
+# --- 공통 -------------------------------------------------------------------
+# numpy 2.x 는 mediapipe/opencv 와 ABI 충돌(임포트 즉시 크래시) → 1.x 고정
+numpy==1.26.4
+
+# --- handtracking_final : 웹캠 MediaPipe 손추적 → ROS 발행 -------------------
+opencv-python==4.11.0.86
+mediapipe==0.10.35
+
+# --- vision_detection_model : YOLO 수술도구 6종 검출 ------------------------
+# torch 는 cu128 로 별도 선설치(README §4). ultralytics 가 끌어오는 torch 는
+# 이미 cu128 이 있으면 재설치하지 않는다.
+ultralytics>=8.3.0,<9
+
+# --- voicellm : Whisper STT + Gemini 분류 -----------------------------------
+# 시스템 패키지 ffmpeg / libportaudio2 선행 필요(README §4). torch 는 cu128.
+openai-whisper>=20231117
+google-generativeai>=0.8.3,<0.9
+sounddevice>=0.4.7,<0.6   # mediapipe 가 ~=0.5 를 요구 → 0.5 까지 허용(한 venv 공존)
+pynput>=1.7.7,<2
+# --system-site-packages 로 venv 를 만들면 시스템의 구버전 coverage/numba 가 보여
+# whisper 임포트 시 충돌한다("module 'coverage' has no attribute 'types'" / numba 오류).
+# venv 에 최신 버전을 강제 설치해 시스템 것을 가린다(numba 0.59+ 는 numpy 1.26 호환).
+coverage>=7.4
+numba>=0.59
+llvmlite>=0.42
+
+# --- dashboard : FastAPI WebSocket 상태판 (http://localhost:8137) ------------
+fastapi>=0.115.0,<0.116
+uvicorn[standard]>=0.30.6,<0.31
+
+# --- gripper_technique_test : Isaac Sim 메인 (로봇/씬/모션플래닝) ------------
+# ★ 이 venv 에 pip 로 설치하지 않는다. Isaac Sim 의 Python(3.11) 에 설치/실행.
+#   ★ 절대 주석 해제 금지! PyPI 의 "curobo"(0.1/0.2)는 NVlabs cuRobo 와 무관한
+#     다른 패키지라, 활성화하면 `pip install -r requirements.txt` 가 통째로 실패한다.
+#   curobo 0.7.8  → git 태그 v0.7.8 / NVlabs/curobo → ./install_curobo.sh 로 설치
+#                   의존: Isaac 번들 torch 2.7.0+cu128 (자세한 건 아래 (4))
+
+
+# =============================================================================
+#  [별도 출처] pip 로 이 venv 에 설치하지 않는 의존성 — 참고용 명세
+# =============================================================================
+#
+# --- (2) 시스템 ROS2 제공 (pip 아님) ----------------------------------------
+#   rclpy, std_msgs, geometry_msgs, sensor_msgs, cv_bridge
+#     출처 : /opt/ros/humble  (apt: ros-humble-cv-bridge 추가 필요)
+#     조건 : venv 를 --system-site-packages 로 만들면 자동으로 보임
+#
+# --- (3) Isaac Sim 5.1 번들 (pip 아님 / gripper 모듈 전용) -------------------
+#   isaacsim.*  : Isaac Sim Core·Robot API
+#   omni.*      : Omniverse Kit (omni.graph.core, omni.usd 등)
+#   pxr         : USD (Universal Scene Description)
+#   torch       : 2.7.0+cu128  (Isaac 번들. gripper 는 이걸 사용)
+#     실행 : $ISAAC_SIM_PATH/python.sh 로만 import 가능
+#
+# --- (4) cuRobo  (gripper 모듈 전용 / Isaac Python 에 설치) ------------------
+#   패키지   : curobo
+#   버전     : 0.7.8   (git 태그 v0.7.8 / commit d64c4b0)
+#   소스     : https://github.com/NVlabs/curobo.git
+#   설치대상 : Isaac Sim 의 Python 3.11  (시스템 venv 아님!)
+#   의존     : torch 2.7.0+cu128 (Isaac 번들 사용) + CUDA 빌드 → --no-build-isolation
+#   설치방법 : ./install_curobo.sh   (버전 v0.7.8 고정 + 설치 + import 검증 자동)
+#   수동설치 : git clone https://github.com/NVlabs/curobo.git
+#              cd curobo && git checkout v0.7.8
+#              "$ISAAC_SIM_PATH/python.sh" -m pip install -e . --no-build-isolation
+#   사용처   : gripper_technique_test/m0609_curobo_controller.py
+#              (MotionGen / MpcSolver — 로봇 모션 플래닝)
+# =============================================================================

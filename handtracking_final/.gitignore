@@ -1,0 +1,9 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.vscode/
+.idea/
+run_handtracking.sh

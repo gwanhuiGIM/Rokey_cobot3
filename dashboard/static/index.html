@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SURGICAL ROBOT · CONTROL DECK</title>
+<style>
+  :root{ --bg:#05080f; --panel:#0b1220cc; --line:#1b2c46; --cyan:#36e0ff; --cyan-dim:#1d6f86;
+    --green:#39ffb0; --amber:#ffb347; --red:#ff5a72; --txt:#cfe6ff; --muted:#5d7596; }
+  *{box-sizing:border-box;margin:0;padding:0;font-family:"Consolas","D2Coding",ui-monospace,monospace}
+  html,body{height:100%}
+  body{background:radial-gradient(1200px 700px at 50% -10%,#0a1830 0%,var(--bg) 60%);
+       color:var(--txt);padding:12px;letter-spacing:.3px;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--line);
+         padding-bottom:8px;margin-bottom:10px;flex:0 0 auto}
+  header h1{font-size:16px;font-weight:700;color:#eaf6ff} header h1 b{color:var(--cyan)}
+  .pills{display:flex;gap:7px;font-size:10px;flex-wrap:wrap}
+  .pill{border:1px solid var(--line);border-radius:20px;padding:3px 10px;color:var(--muted)}
+  .pill.on{color:var(--green);border-color:#135a44;box-shadow:0 0 10px #0c3b2e inset}
+  .pill.off{color:var(--red);border-color:#5a1320}
+  .ico-svg{width:1em;height:1em;vertical-align:-.15em;display:inline-block}
+
+  .wrap{flex:1 1 auto;display:flex;flex-direction:column;gap:12px;min-height:0}
+  .kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;flex:0 0 auto}
+  .top{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:1 1 0;min-height:0}
+  .bottom{display:grid;grid-template-columns:1fr 1fr 1fr 1.2fr;gap:12px;flex:1 1 0;min-height:0}
+  #map{width:100%;flex:1 1 auto;min-height:150px;display:block}
+  .held-note{font-size:10px;color:var(--amber);margin-top:4px;min-height:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;
+        position:relative;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+  .card::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+        background:linear-gradient(90deg,transparent,var(--cyan),transparent);opacity:.5}
+  .card h2{font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:9px;text-transform:uppercase;
+        display:flex;justify-content:space-between;align-items:center;gap:8px;flex:0 0 auto}
+  .hint{font-size:9px;color:var(--muted);text-transform:none;letter-spacing:0}
+  .scroll{overflow:auto;min-height:0;flex:1 1 auto}
+
+  .kpi{justify-content:space-between}
+  .kpi .lab{font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase}
+  .kpi .big{font-size:38px;font-weight:700;line-height:1;color:#eaf6ff}
+  .kpi .big small{font-size:15px;color:var(--muted)}
+  .kpi.alert .big{color:var(--red);text-shadow:0 0 12px #5a1320}
+  .kpi.good .big{color:var(--green);text-shadow:0 0 12px #0c3b2e}
+  .kpi .sub{font-size:10px;color:var(--muted)}
+  .gauge-wrap{display:flex;align-items:center;gap:10px}
+  .spark{width:100%;height:34px}
+
+  #cam-wrap{border:1px solid var(--line);border-radius:10px;background:#070d18;padding:5px;
+        flex:1 1 auto;min-height:0;display:flex;align-items:center;justify-content:center}
+  #cam{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;display:block}
+
+  #robots{display:flex;gap:8px;align-items:stretch;flex:1 1 auto;min-height:0}
+  .robot{flex:1 1 0;min-width:0;border:1px solid var(--line);border-radius:10px;padding:10px;background:#0a1322}
+  .robot .top2{display:flex;justify-content:space-between;align-items:center}
+  .robot .name{font-size:13px;font-weight:700;color:#eaf6ff}
+  .robot .hand{font-size:9px;color:var(--muted);margin-left:6px}
+  .robot .state{font-size:10px;padding:2px 8px;border-radius:6px;border:1px solid var(--cyan-dim);color:var(--cyan)}
+  .robot.act .state{color:var(--green);border-color:#1c6b4e;box-shadow:0 0 12px #0c3b2e}
+  .robot .row{display:flex;justify-content:space-between;margin-top:6px;font-size:11px}
+  .robot .row .k{color:var(--muted)} .robot .v.tool{color:var(--amber);font-weight:700}
+  .steps{display:flex;gap:4px;margin-top:9px}
+  .steps .st{flex:1;height:4px;border-radius:2px;background:#13233c;position:relative}
+  .steps .st.done{background:var(--cyan-dim)}
+  .steps .st.cur{background:var(--cyan);box-shadow:0 0 8px var(--cyan)}
+  .steplab{display:flex;justify-content:space-between;margin-top:4px;font-size:8px;color:var(--muted)}
+
+  .trays{display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:9px;flex:1 1 auto;min-height:0}
+  .tray{border:1px solid var(--line);border-radius:11px;display:flex;flex-direction:column;
+        align-items:center;justify-content:center;background:#0a1322;position:relative;transition:.18s}
+  .tray .tid{position:absolute;top:4px;left:6px;font-size:9px;color:var(--muted)}
+  .tray .act{position:absolute;top:4px;right:6px;font-size:9px;color:var(--muted)}
+  .tray .ico{font-size:30px;line-height:0;color:var(--cyan);filter:drop-shadow(0 0 6px var(--cyan))}
+  .tray .tname{font-size:11px;margin-top:6px;font-weight:700}
+  .tray.empty{border-style:dashed;border-color:#23344f} .tray.empty .tname{color:var(--muted)} .tray.empty .ico{color:#33465f;filter:none}
+  .tray.filled{border-color:var(--cyan-dim);box-shadow:0 0 16px #0a2740 inset} .tray.filled .tname{color:var(--cyan)}
+  .tray.held{border-color:var(--amber);box-shadow:0 0 16px #3a2a08 inset} .tray.held .ico{color:var(--amber);filter:drop-shadow(0 0 6px var(--amber))}
+  .tray.req{border-color:var(--green);box-shadow:0 0 16px #0c3b2e inset} .tray.req .tname{color:var(--green)} .tray.req .ico{color:var(--green);filter:drop-shadow(0 0 6px var(--green))}
+  .tray{transition:box-shadow .15s ease, border-color .15s ease}
+  .tray.click{cursor:pointer} .tray.click:hover{box-shadow:0 0 22px #0e4a6e inset, 0 0 14px #0a3552;filter:brightness(1.12)}
+  .tray.held.click .act{color:var(--amber)} .tray.filled.click .act{color:var(--cyan)} .tray.req.click .act{color:var(--green)}
+  .btn-recent{align-self:flex-end;margin-top:9px;border:1px solid #5a2030;background:#160a10;color:var(--red);
+        border-radius:7px;padding:5px 14px;font-size:10px;cursor:pointer;font-family:inherit;flex:0 0 auto}
+  .btn-recent:hover{background:#22101a}
+  #cmd-msg{font-size:10px;color:var(--muted);margin-top:6px;min-height:12px;flex:0 0 auto}
+
+  .mic{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;color:var(--muted);flex:0 0 auto}
+  .dot{width:9px;height:9px;border-radius:50%;background:#33465f}
+  .dot.live{background:var(--red);box-shadow:0 0 12px var(--red);animation:pulse 1s infinite}
+  @keyframes pulse{50%{opacity:.4}}
+  .vlog .v{border-left:2px solid var(--cyan-dim);padding:4px 7px;margin-bottom:5px;background:#0a1322;font-size:11px}
+  .vlog .v .stt{color:var(--txt)} .vlog .v .cls{color:var(--amber);font-weight:700}
+
+  .filters{display:flex;gap:5px}
+  .filters button{font-family:inherit;font-size:9px;border:1px solid var(--line);background:#0a1322;color:var(--muted);
+        border-radius:10px;padding:2px 8px;cursor:pointer}
+  .filters button.on{color:var(--cyan);border-color:var(--cyan-dim)}
+  .feed .ev{display:flex;gap:6px;align-items:flex-start;padding:4px 7px;margin-bottom:4px;background:#0a1322;
+        border-left:2px solid var(--cyan-dim);font-size:10px;color:var(--muted)}
+  .feed .ev .ei{flex:0 0 auto;margin-top:1px}
+  .feed .ev .msg{color:var(--txt)}
+  .feed .ev.ok{border-color:var(--green)} .feed .ev.ok .ei{color:var(--green)}
+  .feed .ev.no{border-color:var(--red)} .feed .ev.no .ei{color:var(--red)}
+  .feed .ev.op{border-color:var(--cyan-dim)} .feed .ev.op .ei{color:var(--cyan)} .feed .ev.op .msg{color:var(--cyan)}
+  .feed .ev.voice{border-color:var(--amber)} .feed .ev.voice .ei{color:var(--amber)}
+</style>
+</head>
+<body>
+  <header>
+    <h1><b>◈ SURGICAL ROBOT</b> · CONTROL DECK</h1>
+    <div class="pills">
+      <span class="pill" id="src-status">ROBOT</span><span class="pill" id="src-vision">VISION</span>
+      <span class="pill" id="src-voice">VOICE</span><span class="pill" id="src-result">CMD</span>
+      <span class="pill" id="src-camera">CAM</span><span class="pill" id="src-link">LINK</span>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="kpis">
+      <div class="card kpi"><span class="lab">Tools Present</span>
+        <div class="gauge-wrap">
+          <svg width="56" height="56" viewBox="0 0 56 56">
+            <circle cx="28" cy="28" r="24" fill="none" stroke="#13233c" stroke-width="7"/>
+            <circle id="g-present" cx="28" cy="28" r="24" fill="none" stroke="#36e0ff" stroke-width="7"
+              stroke-linecap="round" stroke-dasharray="150.8" stroke-dashoffset="150.8"
+              transform="rotate(-90 28 28)" style="filter:drop-shadow(0 0 4px #36e0ff);transition:.5s"/>
+          </svg>
+          <div class="big"><span id="kpi-present">0</span><small>/6</small></div>
+        </div></div>
+      <div class="card kpi" id="kpi-missing-card"><span class="lab">Missing</span>
+        <div class="big" id="kpi-missing">0</div><span class="sub" id="kpi-missing-names">none</span></div>
+      <div class="card kpi"><span class="lab">Active Robots</span>
+        <div class="big"><span id="kpi-active">0</span><small>/2</small></div><span class="sub">moving now</span></div>
+      <div class="card kpi"><span class="lab">Commands</span>
+        <div class="big" id="kpi-cmds">0</div><span class="sub">this session</span></div>
+      <div class="card kpi"><span class="lab">Activity (60s)</span>
+        <svg class="spark" id="spark" viewBox="0 0 120 34" preserveAspectRatio="none"></svg>
+        <span class="sub"><span style="color:var(--cyan)">●</span> present <span style="color:var(--amber)">●</span> active</span></div>
+    </div>
+
+    <div class="top">
+      <div class="card"><h2>Hand Tracking</h2>
+        <div id="cam-wrap"><img id="cam" src="/camera" alt="hand tracking">
+          <span id="cam-msg" style="color:var(--muted);font-size:11px;text-align:center;padding:0 10px;display:none">● 연결 대기</span></div></div>
+      <div class="card"><h2>Tray Status &amp; Control <span class="hint">도구 클릭=요청 · 운반중 클릭=반납</span></h2>
+        <div class="trays" id="trays"></div>
+        <button class="btn-recent" onclick="cmd('/cmd/return_recent')">↩ 최근 작업 반납</button>
+        <div id="cmd-msg"></div></div>
+    </div>
+
+    <div class="bottom">
+      <div class="card"><h2>Robots</h2><div class="scroll" id="robots"></div></div>
+      <div class="card"><h2>Voice (Whisper)</h2>
+        <div class="mic"><span class="dot" id="mic-dot"></span><span id="mic-txt">대기 중</span></div>
+        <div class="scroll vlog" id="vlog"></div></div>
+      <div class="card"><h2>Operation &amp; Command Log
+        <span class="filters"><button data-f="all" class="on" onclick="setFilter('all')">전체</button>
+          <button data-f="cmd" onclick="setFilter('cmd')">명령</button>
+          <button data-f="op" onclick="setFilter('op')">상태</button></span></h2>
+        <div class="scroll feed" id="feed"></div></div>
+      <div class="card"><h2>Robot Map</h2>
+        <svg id="map" viewBox="0 0 220 130" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="held-note" id="held-note"></div></div>
+    </div>
+  </div>
+
+<script>
+// ── 직접 만든 SVG 아이콘 ──────────────────────────
+function svg(inner){return `<svg class="ico-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;}
+const TOOL_SVG={
+  "메스":'<path d="M4 20l8-8"/><path d="M12 12l5.5-5.5a2.8 2.8 0 1 1 0 5L12 17z" fill="currentColor" fill-opacity=".15"/>',
+  "캘리퍼":'<path d="M8 3v9M16 3v9"/><path d="M5 12h14v3a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2z" fill="currentColor" fill-opacity=".12"/><path d="M12 17v4"/>',
+  "클램프":'<path d="M7 3v6a3 3 0 0 0 3 3h5a3 3 0 0 1 0 6"/><path d="M5 3h4M14 21h4"/>',
+  "망치":'<path d="M3.5 8.5h11v4h-11z" fill="currentColor" fill-opacity=".15"/><path d="M9 12.5l1.4 8h2.2l1.4-8"/>',
+  "톱":'<path d="M3 8h13"/><path d="M3 8l2 3 2-3 2 3 2-3 2 3 2-3"/><path d="M16 8l5 2v3l-5 2z" fill="currentColor" fill-opacity=".12"/>',
+  "봉합바늘":'<path d="M4 20a11 11 0 0 1 11-11"/><circle cx="16.5" cy="7.5" r="1.5"/><path d="M16.5 7.5l3-3"/>',
+};
+const EN2KO={knife:"메스",caliper:"캘리퍼",clamps:"클램프",mallet:"망치",handsaws:"톱",ligature_needle:"봉합바늘"};
+function ko(t){ return EN2KO[t]||t; }   // 비전(영어) → 한글 정규화
+function toolSvg(t){ t=ko(t); return TOOL_SVG[t]?svg(TOOL_SVG[t]):svg('<circle cx="12" cy="12" r="7"/>'); }
+const ICN={
+  req:svg('<path d="M12 3v10M8 9l4 4 4-4"/><path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>'),
+  ok:svg('<path d="M4 12l5 5L20 6"/>'),
+  no:svg('<circle cx="12" cy="12" r="9"/><path d="M8.5 8.5l7 7M15.5 8.5l-7 7"/>'),
+  op:svg('<path d="M4 11a8 8 0 0 1 13.7-5.7M20 4v4h-4"/><path d="M20 13a8 8 0 0 1-13.7 5.7M4 20v-4h4"/>'),
+  voice:svg('<rect x="9.5" y="3" width="5" height="10" rx="2.5" fill="currentColor" fill-opacity=".15"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'),
+};
+
+const ACTIVE=new Set(["PICK_APPROACH","PICK_TRANSPORT","TRACKING","PLACE","RETURN_HOME"]);
+const PHASES=["PICK_APPROACH","PICK_TRANSPORT","TRACKING","PLACE","RETURN_HOME"];
+const PHASE_SHORT=["PICK","MOVE","TRACK","PLACE","HOME"];
+const HAND_OF={A:"왼손",B:"오른손"};
+const TRAY_LAYOUT=[[0,2,4],[1,3,5]];
+const ALL_TOOLS=["메스","캘리퍼","클램프","망치","톱","봉합바늘"];
+const C=2*Math.PI*24;
+// 비전(트레이 empty) + 로봇 held 융합:
+//  트레이에 보임=present / empty인데 로봇이 들고있음=held / empty+아무도안듦=MISSING
+function computeInventory(vision,robots){
+  const present=new Set();
+  for(const k in vision){ const t=vision[k]; if(t&&t!=="EMPTY") present.add(ko(t)); }  // 영→한
+  const heldBy={};
+  for(const id in robots){ const r=robots[id]; if(r&&r.held_tool) heldBy[ko(r.held_tool)]=id; }
+  const missing=ALL_TOOLS.filter(t=>!present.has(t) && !(t in heldBy));
+  return {present,heldBy,missing};
+}
+function pill(id,on){ const e=document.getElementById(id); if(e) e.className="pill "+(on?"on":"off"); }
+function ts(t){ return new Date((t||0)*1000).toLocaleTimeString(); }
+
+const cmdSeen=new Set(); const hist=[]; const since={}; let prevState={}; let FILTER='all';
+function setFilter(f){ FILTER=f; document.querySelectorAll('.filters button').forEach(b=>b.className=b.dataset.f===f?'on':''); }
+
+function renderKPIs(s,missing,visionOn){
+  if(!visionOn){
+    // 비전 노드 없음 → 트레이 상태 판단 불가 (전부 missing 아님)
+    document.getElementById("kpi-present").textContent="—";
+    document.getElementById("g-present").setAttribute("stroke-dashoffset", C);
+    document.getElementById("kpi-missing").textContent="—";
+    document.getElementById("kpi-missing-names").textContent="비전 대기";
+    document.getElementById("kpi-missing-card").className="card kpi";
+  }else{
+    const present=Math.max(0,6-missing.length);
+    document.getElementById("kpi-present").textContent=present;
+    document.getElementById("g-present").setAttribute("stroke-dashoffset", C*(1-present/6));
+    document.getElementById("kpi-missing").textContent=missing.length;
+    document.getElementById("kpi-missing-names").textContent=missing.length?missing.join(", "):"none";
+    document.getElementById("kpi-missing-card").className="card kpi"+(missing.length?" alert":" good");
+  }
+  let active=0; for(const id in (s.robots||{})) if(ACTIVE.has(s.robots[id].state)) active++;
+  document.getElementById("kpi-active").textContent=active;
+  for(const e of (s.events||[])) if(e.t) cmdSeen.add(Math.round(e.t*1000));
+  document.getElementById("kpi-cmds").textContent=cmdSeen.size;
+  hist._last={present:visionOn?Math.max(0,6-missing.length):0, active};
+}
+function pushHist(){ if(!hist._last) return; hist.push(hist._last); if(hist.length>60) hist.shift();
+  if(hist.length<2) return; const w=120,h=34;
+  const p=(k,mx)=>hist.map((d,i)=>`${(i/59)*w},${h-2-(d[k]/mx)*(h-4)}`).join(" ");
+  document.getElementById("spark").innerHTML=
+    `<polyline fill="none" stroke="#36e0ff" stroke-width="1.5" points="${p('present',6)}"/>`+
+    `<polyline fill="none" stroke="#ffb347" stroke-width="1.5" points="${p('active',2)}"/>`;
+}
+
+function renderRobots(robots){
+  const w=document.getElementById("robots"); w.innerHTML="";
+  const ids=Object.keys(robots).sort();
+  if(!ids.length){ w.innerHTML='<div style="color:var(--muted);font-size:11px">waiting for /m0609/status …</div>'; return; }
+  for(const id of ids){ const r=robots[id]||{}; const st=r.state||"IDLE";
+    if(prevState[id]!==st){ since[id]=Date.now(); prevState[id]=st; }
+    const el=since[id]?Math.floor((Date.now()-since[id])/1000):0;
+    const tool=r.held_tool?`${toolSvg(r.held_tool)} ${r.held_tool}`:"—";
+    const ci=PHASES.indexOf(st);
+    let steps="",labs="";
+    PHASES.forEach((p,i)=>{ const c=ci<0?"":(i<ci?"done":(i===ci?"cur":"")); steps+=`<div class="st ${c}"></div>`; labs+=`<span>${PHASE_SHORT[i]}</span>`; });
+    w.insertAdjacentHTML("beforeend",`<div class="robot ${ACTIVE.has(st)?'act':''}">
+      <div class="top2"><span><span class="name">ROBOT ${id}</span><span class="hand">${HAND_OF[id]||""} 추종</span></span>
+        <span class="state">${st} · ${el}s</span></div>
+      <div class="row"><span class="k">HOLDING</span><span class="v tool">${tool}</span></div>
+      <div class="row"><span class="k">TARGET TRAY</span><span class="v">${r.tray??"—"}</span></div>
+      <div class="steps">${steps}</div><div class="steplab">${labs}</div></div>`);
+  }
+}
+// 클릭으로 요청한 트레이: tid -> 도구명(한글). 클릭 토글(요청↔반납)의 시각 상태.
+const requested=new Map();
+let lastVision={}, lastRobots={};
+function toggleTray(tid){
+  if(requested.has(tid)){                       // 요청됨(초록) → 다시 누르면 반납·원래상태
+    const tool=requested.get(tid); requested.delete(tid);
+    cmd('/cmd/return/'+encodeURIComponent(tool));
+  }else{                                        // 도구 있음 → 요청(초록) + pick
+    const raw=lastVision[String(tid)]; const tool=raw&&raw!=="EMPTY"&&raw!=null?ko(raw):null;
+    if(!tool) return;
+    requested.set(tid,tool);
+    cmd('/cmd/pick/'+encodeURIComponent(tool));
+  }
+  renderTrays(lastVision,lastRobots);           // 즉시 반영
+}
+function renderTrays(vision,robots){
+  lastVision=vision; lastRobots=robots;
+  const heldTray={}; for(const id in robots){ const r=robots[id]; if(r&&r.held_tool&&r.tray!=null) heldTray[r.tray]=ko(r.held_tool); }
+  // 상태가 바뀐 경우에만 DOM 재생성 (매 틱 재생성 시 hover 진동 방지)
+  const sig=JSON.stringify([vision,heldTray,[...requested.entries()]]);
+  if(sig===renderTrays._sig) return; renderTrays._sig=sig;
+  const w=document.getElementById("trays"); w.innerHTML="";
+  for(const rowArr of TRAY_LAYOUT) for(const tid of rowArr){
+    const t=vision[String(tid)]; const filled=t&&t!=="EMPTY"&&t!=null;
+    const reqd=requested.has(tid); const held=heldTray[tid];
+    let cls="empty",act="",name="EMPTY",clickable=false;
+    if(reqd){ cls="req click"; act="↩ 반납"; name=requested.get(tid); clickable=true; }      // 요청됨(초록)
+    else if(held){ cls="held click"; act="↩ 반납"; name=held; clickable=true; }              // 로봇 보유(주황)
+    else if(filled){ cls="filled click"; act="▶ 요청"; name=ko(t); clickable=true; }          // 도구 있음(시안)
+    const ic=(name!=="EMPTY")?`<span class="ico">${toolSvg(name)}</span>`:`<span class="ico">${svg('<circle cx="12" cy="12" r="8" stroke-dasharray="3 3"/>')}</span>`;
+    w.insertAdjacentHTML("beforeend",`<div class="tray ${cls}" ${clickable?`onclick="toggleTray(${tid})"`:""}>
+      <span class="tid">T${tid}</span><span class="act">${act}</span>${ic}<span class="tname">${name}</span></div>`);
+  }
+}
+function renderVoice(voice,listening){
+  document.getElementById("mic-dot").className="dot"+(listening?" live":"");
+  document.getElementById("mic-txt").textContent=listening?"듣는 중…":"대기 중";
+  const w=document.getElementById("vlog"); w.innerHTML="";
+  for(const v of (voice||[])) w.insertAdjacentHTML("beforeend",`<div class="v"><span style="color:var(--muted)">${ts(v.t)}</span>
+    "<span class="stt">${v.stt||""}</span>" → <span class="cls">${v.raw||"?"}</span></div>`);
+}
+function renderFeed(events,ops){
+  // Command Log = 명령 결과 + 로봇 상태전이 전용 (음성은 Voice 패널에만)
+  const m=[];
+  for(const e of (events||[])) m.push({t:e.t,kind:"cmd",d:e.data,raw:e.raw});
+  for(const o of (ops||[])) m.push({t:o.t,kind:"op",o:o});
+  m.sort((a,b)=>(b.t||0)-(a.t||0));
+  const w=document.getElementById("feed"); w.innerHTML="";
+  for(const x of m){
+    if(FILTER!=='all' && FILTER!==x.kind) continue;
+    if(x.kind==="op"){ const o=x.o;
+      w.insertAdjacentHTML("beforeend",`<div class="ev op"><span class="ei">${ICN.op}</span><span><span style="color:var(--muted)">${ts(x.t)}</span> ROBOT ${o.robot} · <span class="msg">${o.to}</span>${o.tool?` (${o.tool})`:""} <span style="color:var(--muted)">←${o.from}</span></span></div>`);
+    } else { const d=x.d||{}; const ok=d.accepted!==false; const msg=d.message||d.status||x.raw||""; const tool=d.tool_id?`[${d.tool_id}] `:"";
+      w.insertAdjacentHTML("beforeend",`<div class="ev ${ok?'ok':'no'}"><span class="ei">${ok?ICN.req:ICN.no}</span><span><span style="color:var(--muted)">${ts(x.t)}</span> ${tool}<span class="msg">${msg}</span></span></div>`);
+    }
+  }
+}
+async function cmd(url){ const m=document.getElementById("cmd-msg");
+  try{ const r=await fetch(url,{method:"POST"}); const j=await r.json();
+    m.textContent=j.ok?`✓ ${j.sent}`:`✗ ${j.msg}`; m.style.color=j.ok?"var(--green)":"var(--red)";
+  }catch(e){ m.textContent="✗ 전송 실패"; m.style.color="var(--red)"; } }
+
+(function camInit(){ const img=document.getElementById("cam");
+  // MJPEG <img> 는 스트림 중 onerror 가 튈 수 있다 → 숨기지 말고 재연결
+  img.onerror=()=>{ setTimeout(()=>{ img.src="/camera?"+Date.now(); }, 1500); };
+})();
+function renderCamera(on){ const msg=document.getElementById("cam-msg");
+  // <img>는 CSS로 항상 표시(+자동 재연결). 여기선 끊김 메시지만 토글.
+  msg.style.display = on ? "none" : "block";
+  if(!on) msg.textContent="● 연결 끊김 · 손 추적 노드 대기 중";
+}
+function renderAlert(missing,visionOn){
+  const e=document.getElementById("alert");
+  if(visionOn && missing && missing.length){ e.className="alert show"; e.textContent="⚠ MISSING: "+missing.join(" / "); }
+  else e.className="alert";
+}
+setInterval(pushHist,1000);
+
+// 로봇 맵: 위에서 본 도식 — 트레이 6칸 + 로봇 A(좌)/B(우), 활성 로봇은 타겟 트레이로 선
+function trayXY(id){ return { x:62+Math.floor(id/2)*46, y:24+(id%2)*46 }; }  // col=floor(id/2),row=id%2
+const MAP_ACTIVE=["PICK_APPROACH","PICK_TRANSPORT","TRACKING","PLACE","RETURN_HOME"];
+function renderRobotMap(robots,vision){
+  robots=robots||{}; vision=vision||{};
+  // 상태가 바뀔 때만 다시 그린다 → SVG 궤적 애니메이션이 매 틱 끊기지 않고 계속 흐름
+  const sig=JSON.stringify([
+    ["A","B"].map(id=>{const r=robots[id]||{};return [r.state||"",r.tray??-1,r.held_tool||""];}),
+    [...Array(6).keys()].map(i=>{const t=vision[String(i)];return t&&t!=="EMPTY"&&t!=null?1:0;})
+  ]);
+  if(sig===renderRobotMap._sig) return; renderRobotMap._sig=sig;
+
+  const TW=34,TH=34; let s='';
+  for(const rowArr of TRAY_LAYOUT) for(const tid of rowArr){
+    const p=trayXY(tid); const t=vision[String(tid)]; const filled=t&&t!=="EMPTY"&&t!=null;
+    const col=filled?"#1d6f86":"#23344f";
+    s+=`<rect x="${p.x}" y="${p.y}" width="${TW}" height="${TH}" rx="5" fill="#0a1322" stroke="${col}" stroke-width="1.4"/>`;
+    s+=`<text x="${p.x+TW/2}" y="${p.y+TH/2+3}" fill="${filled?'#36e0ff':'#3a4a63'}" font-size="8" text-anchor="middle">T${tid}</text>`;
+  }
+  const POS={A:{x:18,y:70},B:{x:202,y:70}};
+  for(const id of ["A","B"]){
+    const r=robots[id]; const p=POS[id];
+    const act=r&&MAP_ACTIVE.includes(r.state);
+    const col=act?"#39ffb0":"#5d7596";
+    if(r&&r.tray!=null && act){ const tp=trayXY(r.tray); const x2=tp.x+TW/2, y2=tp.y+TH/2;
+      // 흐르는 대시 라인 = 궤적
+      s+=`<line x1="${p.x}" y1="${p.y}" x2="${x2}" y2="${y2}" stroke="${col}" stroke-width="1.6" stroke-dasharray="5 4" opacity=".85">`+
+         `<animate attributeName="stroke-dashoffset" from="18" to="0" dur="0.7s" repeatCount="indefinite"/></line>`;
+      // 경로를 따라 이동하는 점 = 진행 헤드
+      s+=`<circle r="2.8" fill="${col}" style="filter:drop-shadow(0 0 5px ${col})">`+
+         `<animate attributeName="cx" from="${p.x}" to="${x2}" dur="1.3s" repeatCount="indefinite"/>`+
+         `<animate attributeName="cy" from="${p.y}" to="${y2}" dur="1.3s" repeatCount="indefinite"/>`+
+         `<animate attributeName="opacity" values="0;1;1;0" dur="1.3s" repeatCount="indefinite"/></circle>`;
+    }
+    s+=`<circle cx="${p.x}" cy="${p.y}" r="9" fill="#0a1322" stroke="${col}" stroke-width="2"${act?' style="filter:drop-shadow(0 0 6px '+col+')"':''}/>`;
+    s+=`<text x="${p.x}" y="${p.y+3}" fill="${col}" font-size="9" text-anchor="middle" font-weight="bold">${id}</text>`;
+    s+=`<text x="${p.x}" y="${p.y+22}" fill="${col}" font-size="7" text-anchor="middle">${r?(r.state||'—'):'—'}</text>`;
+    if(r&&r.held_tool) s+=`<text x="${p.x}" y="${p.y+31}" fill="#ffb347" font-size="7" text-anchor="middle">${ko(r.held_tool)}</text>`;
+  }
+  document.getElementById("map").innerHTML=s;
+}
+
+function connect(){
+  const ws=new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage=(e)=>{ const s=JSON.parse(e.data);
+    // 연결 표시등은 맨 먼저(다른 렌더가 에러나도 항상 갱신되도록)
+    const o=s.online||{};
+    pill("src-status",o.status); pill("src-vision",o.vision);
+    pill("src-voice",o.voice); pill("src-result",o.result);
+    pill("src-camera",o.camera); pill("src-link",true);
+    try{
+      const visionOn=!!o.vision;
+      const inv=computeInventory(s.trays_vision||{}, s.robots||{});
+      renderKPIs(s, inv.missing, visionOn); renderRobots(s.robots||{}); renderTrays(s.trays_vision||{}, s.robots||{});
+      renderVoice(s.voice, s.listening); renderFeed(s.events, s.ops);
+      renderAlert(inv.missing, visionOn); renderRobotMap(s.robots||{}, s.trays_vision||{});
+      const hn=Object.entries(inv.heldBy).map(([t,r])=>`${t}→ROBOT ${r}`).join("  ");
+      document.getElementById("held-note").textContent=hn?("보유: "+hn):"";
+      renderCamera(!!o.camera);
+    }catch(err){ console.error("render error:",err); }
+  };
+  ws.onclose=()=>{ pill("src-link",false); setTimeout(connect,1500); };
+}
+connect();
+</script>
+</body>
+</html>
