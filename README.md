@@ -178,6 +178,36 @@ ros2 topic echo /m0609/tool_command_result                                     #
 
 </details>
 
+<a id="contribution"></a>
+## 프로젝트 요약 · 본인 담당 (김관희)
+
+> 포트폴리오용 프로젝트 요약입니다. 이 저장소의 코드는 팀 최종 제출본이고, 제 역할 범위는 **본인 담당** 행에 적었습니다. 접힌 '프로젝트 기술 전체'는 팀 전체 시스템 설명입니다. 다른 프로젝트: [github.com/gwanhuiGIM](https://github.com/gwanhuiGIM)
+
+**집도의의 손 동작·음성 명령으로 두 협동로봇이 수술도구를 전달하는 Isaac Sim 시뮬레이션을 구현하였습니다.**<br>
+이 과정에서 두 로봇의 작업 단계와 트레이별 수술도구 재고, 손추적 영상, 음성·명령 로그를 한 화면에서 실시간으로 확인하는 웹 대시보드를 만들었습니다.
+
+▶️ [1분 시연 영상](https://youtu.be/EUDn9btPNTw)
+
+Dual Doosan M0609 · NVIDIA Isaac Sim · 팀 프로젝트 · ROKEY 1차 (26.06.17~26.06.30)
+**본인 담당:** 웹 대시보드 UI·상호작용
+
+- **개요:** 집도의의 손 동작·음성으로 이중 협동로봇이 수술도구 6종을 전달하는 시뮬레이션
+- **핵심 행동:** 트레이 재고·로봇 점유 상태를 SVG로 시각화, 관련 상태가 바뀔 때만 다시 그려 화면 떨림 방지
+
+<details>
+<summary><b>프로젝트 기술 전체 · 코드 근거</b></summary>
+
+- **손 동작 텔레오퍼레이션:** MediaPipe로 양손 위치·회전·제스처를 추적해 로봇 끝단 목표로 변환, FOLLOW/PLACE/WAITING 제스처 모드
+- **음성 명령:** Whisper STT → Gemini가 도구 6종으로 분류, 가장 가까운 로봇이 해당 트레이로 이동해 전달·반납
+- **비전:** Isaac Sim 카메라 영상에서 YOLOv8로 트레이별 도구/빈칸 인식, 로봇 보유 상태와 융합해 MISSING 판정, 도구 무작위 배치로 검증
+- **작업 관리:** 두 로봇 작업 분배(가까운 로봇 우선), 교체·반납·PICK 도중 취소·중복 요청 방지
+- **웹 대시보드:** FastAPI + WebSocket으로 손추적 영상·트레이 상태·로봇 상태·음성/명령 로그·Robot Map 실시간 표시
+- **코드 근거:** [SVG 아이콘 — `index.html`](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L167-L186) · [상태 변경 시에만 재렌더링](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L275-L280)
+
+</details>
+
+개인 개발본: [Personal_cobot3_ws](https://github.com/gwanhuiGIM/Personal_cobot3_ws)
+
 ## License
 
 이 저장소에는 License를 부여하지 않았습니다(All rights reserved). 포함된 upstream 코드와 자산(Doosan URDF, MediaPipe 모델, Isaac Sim 자산, cuRobo, Ultralytics 등)은 각 원본의 LICENSE를 따릅니다.
