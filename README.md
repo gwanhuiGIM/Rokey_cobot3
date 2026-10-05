@@ -1,304 +1,197 @@
-# 🤖 수술도구 텔레오퍼레이션 로봇 (Dual M0609 · Isaac Sim)
+# Dual M0609 수술도구 전달 시뮬레이션 (Isaac Sim · ROS 2)
 
-이 프로젝트는 **ROS 2 Humble** 과 **NVIDIA Isaac Sim 5.1** 환경에서 구동되는
-**이중 협동로봇(Doosan M0609 ×2) 수술도구 전달 시스템**입니다.
-집도의는 **손 동작(MediaPipe)** 과 **음성(Whisper + Gemini)** 으로 로봇을 조작하고,
-**YOLOv8 비전** 이 트레이별 수술도구 상태를 실시간으로 인식하며,
-**웹 대시보드** 로 전체 상태를 모니터링합니다.
+> 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 이 저장소의 개인 변경은 README 정리, clone 복원용 scene 자산 분할 업로드, 백업 URDF 삭제입니다.
 
-> **도구 6종:** 메스 · 캘리퍼 · 클램프 · 망치 · 톱 · 봉합바늘
+**Isaac Sim 5.1 시뮬레이션 전용** 프로젝트입니다. 가상 수술실에서 Doosan M0609 두 대가 수술도구 6종을 트레이에서 집어 집도의 손 위치로 가져다주고, 반납·교체·취소 요청도 처리합니다.
+명령은 손 동작(MediaPipe), 음성(Whisper + Gemini), 웹 대시보드 클릭으로 냅니다. 트레이별 도구 유무는 YOLO가 시뮬레이터 카메라 영상에서 인식합니다.
+실물 로봇·그리퍼 구동 코드는 없습니다. 실물 환경에서 도구를 준비하거나 환경을 모사하지도 않았습니다.
 
----
+> **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나(`gripper_technique_test/main.py`)에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
-## 📌 주요 기능 (Key Features)
-
-### 1. 손 동작 기반 텔레오퍼레이션 (Hand Teleoperation)
-- **탐지:** 웹캠 + MediaPipe 로 양손의 위치·회전·제스처를 실시간 추적합니다.
-- **제어:** 손 좌표를 로봇 EE 목표로 변환(손보다 **20cm 위**)하여 로봇이 손을 추종합니다.
-- **모드 제스처:** `FOLLOW`(주먹+손바닥 카메라방향, 추종) / `PLACE`(편손+손등 카메라방향, 1회 반납) / `WAITING`(중립).
-
-### 2. 음성 명령 (Voice Command)
-- **탐지:** SPACE 녹음 → Whisper(small) STT → **Gemini** 가 도구 6종으로 분류합니다.
-- **행동:** "메스 줘" → 가장 가까운 로봇이 해당 트레이로 이동해 집어 전달. "그거 아니야"/"반납" → 원위치 복귀.
-
-### 3. 비전 도구 인식 (Tool Detection)
-- **탐지:** Isaac `/rgb` → YOLOv8 로 트레이별 도구/빈칸을 인식합니다.
-- **융합:** 트레이 empty + 로봇 보유 → "보유중", empty + 미보유 → **MISSING** 으로 판정.
-- **시연:** 도구 **무작위 배치(randomize)** 로 비전 효과를 검증합니다.
-
-### 4. 로봇 작업 관리 (Robot Task Management)
-- 두 대 로봇에 작업 분배(트레이 0·2·4→A, 1·3·5→B 우선, 더 가까운 로봇이 처리).
-- 도구 **교체 / 특정 반납 / 최근작업 반납 / PICK 도중 취소 / 중복요청 방지**.
-
-### 5. 통합 웹 대시보드 (Web Dashboard)
-- 손추적 영상(MJPEG) · 트레이 상태/클릭 명령 · 로봇 A/B 상태 · 음성 로그 · 명령 로그 ·
-  KPI(present/missing/active/commands) · **Robot Map(궤적 애니메이션)** 을 실시간 표시.
-
----
-
-## 🛠️ 시스템 설계 (System Architecture)
-
-### 전체 구조
-시스템은 크게 **Perception(인식)**, **Decision(판단)**, **Control(제어)** 세 파트로 구성됩니다.
-
-1. **Perception:** MediaPipe(손) · YOLOv8(도구) · Whisper(음성) 가 센서 입력을 처리합니다.
-2. **Decision:** Gemini 가 음성을 도구 명령으로 분류하고, 제스처 모드/상태기계가 로봇 동작을 결정합니다.
-3. **Control:** Isaac Sim 의 OmniGraph ROS 2 Bridge 가 cuRobo/RMPFlow 모션 플래닝으로 로봇을 구동합니다.
-
-### 데이터 흐름
 ```
-[웹캠]  ── handtracking_final ──┐
-                                ├─(ROS2, DOMAIN 137)─→ gripper_technique_test
-[마이크] ── voicellm ───────────┤                       (Isaac Sim · 로봇/씬 · ROS Bridge
-                                │                        · 상태기계 · cuRobo/RMPFlow)
-[Isaac /rgb] ── vision_detection_model (YOLO) ──→ /m0609/tool_detection
-                                │
-        모든 상태 ──→ dashboard (FastAPI + WebSocket, http://localhost:8137)
+[웹캠] → handtracking_final/hand_trackerorigin.py ─ /left|right_hand_* ───────────┐
+[마이크] → voicellm/voice_llm_model.py ─ /m0609/pick_command, return_tool, ───────┤
+                                         return_recent                            ▼
+[브라우저] ⇄ dashboard/dashboard_server.py ─ (같은 명령 토픽) ──→ gripper_technique_test/main.py (Isaac Sim)
+     ▲                                                              OmniGraph ROS 2 Bridge(토픽 I/O)
+     │                                                              robot_manager → 로봇 A/B 상태머신
+     │                                                              cuRobo(TRACKING) · RMPFlow(pick/place)
+     │                                                                    │ /rgb
+     │                                                                    ▼
+     └── /m0609/status, tool_command_result, tool_detection ── vision_detection_model/vision_tool_detection_node.py (YOLO)
 ```
 
-### 알고리즘 플로우차트 (Logic Flow)
+## 무엇을 할 수 있나
+
+| 사용자가 하는 일 | 시스템이 하는 일 |
+|---|---|
+| "메스 줘"라고 말하기(SPACE를 누르는 동안 녹음) | Whisper STT → Gemini(`gemini-2.5-flash`)가 도구 6종 중 하나로 분류 → `/m0609/pick_command` 발행 |
+| "그거 아니야", "클램프 반납해" | 직전 요청 정정이면 `/m0609/return_recent`, 대상이 분명하면 `/m0609/return_tool` |
+| 대시보드에서 트레이 클릭 | 같은 pick/return 토픽 발행, 결과(`/m0609/tool_command_result`)를 명령 로그로 표시 |
+| 손바닥이 카메라를 향한 주먹 1.5초 유지(FOLLOW) / 손등이 카메라를 향한 편 손 1.5초 유지(PLACE) | 도구를 든 로봇이 TRACKING 상태에서 손을 따라가다가 PLACE 제스처에서 반납 시작 |
+| Isaac 터미널에 `randomize` 입력 | 도구 4~6개를 무작위 트레이에 재배치(`tool_state_manager.py:205`). 요청 즉시가 아니라 코드가 안전하다고 판단한 시점에 적용 |
+
+도구 6종: 메스 · 캘리퍼 · 클램프 · 망치 · 톱 · 봉합바늘 (`voicellm/voice_llm_model.py:39`).
+
+## 시스템 구조
+
+**인식**
+- 손: `hand_trackerorigin.py`가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
+- 음성: `voice_llm_model.py`가 Whisper `small`로 받아 적고, Gemini로 요청과 반납 의도를 가릅니다.
+- 비전: `vision_tool_detection_node.py`가 Isaac `/rgb`를 `weights/best.pt`(YOLO)와 `tray_rois.json`(트레이 ROI)으로 판정해 `/m0609/tool_detection`(JSON)을 발행합니다. ROI는 `tray_roi_calibrator.py`로 다시 잡습니다. 카메라나 트레이 배치를 바꾸면 다시 해야 합니다.
+
+**판단**: `robot_manager.py`가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
+- 1순위는 선호 로봇입니다. 짝수 트레이는 A, 홀수 트레이는 B입니다.
+- 2순위는 트레이까지의 거리입니다(`robot_manager.py:256-268`).
+- 작업을 받을 수 없는 로봇은 후보에서 뺍니다.
+- 교체·특정 반납·최근 작업 반납·중복 요청 처리도 여기서 합니다.
+
+**제어**: 로봇마다 `m0609_state_machine.py` 상태머신이 하나씩 돕니다.
+
 ```mermaid
-flowchart TD
-    A[Start / IDLE] --> B{도구 요청?<br/>음성 or 명령}
-    B -- No --> A
-    B -- Yes --> C[가까운 로봇 선정 + 트레이 할당]
-    C --> D[PICK_APPROACH<br/>트레이로 접근]
-    D --> E[PICK_TRANSPORT<br/>경유지 이동 + 도구 집기]
-    E --> F[TRACKING<br/>손 좌표 추종]
-    F --> G{손 제스처?}
-    G -- FOLLOW --> F
-    G -- PLACE --> H[PLACE<br/>도구를 트레이에 반납]
-    H --> I[RETURN_HOME<br/>홈 복귀]
-    I --> A
-    F -. 취소/그거아니야 .-> H
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> PICK_APPROACH: pick 요청 할당
+    PICK_APPROACH --> PICK_TRANSPORT: 경유지 → 회전 → 도구 흡착 완료
+    PICK_APPROACH --> RETURN_HOME: 반납/취소(도구 미흡착)
+    PICK_TRANSPORT --> TRACKING: TRACKING 위치 도착
+    PICK_TRANSPORT --> PLACE: 반납/취소 요청
+    TRACKING --> PLACE: 손 PLACE 제스처 또는 반납/취소 요청
+    PLACE --> RETURN_HOME: 트레이에 내려놓음
+    PLACE --> IDLE: 교체(다음 도구 작업으로 바로)
+    RETURN_HOME --> IDLE
 ```
 
----
+- 도구 집기(흡착)는 `PICK_APPROACH` 안에서 끝납니다(`PickPhase.PICKING`, `m0609_state_machine.py:30-40`).
+- 반납·취소 요청은 상태에 따라 다르게 처리됩니다(`request_cancel_and_return_from_manager`, `:412`). 도구를 아직 안 집었으면 바로 홈으로 가고, 들고 있으면 PLACE를 거칩니다.
+- 그 밖의 상태에서는 요청을 거절하고 이유를 문자열로 돌려줍니다.
+- 모션 플래너는 상태마다 다릅니다.
+  - TRACKING: cuRobo 0.7.8(`m0609_tracking_controller.py` → `m0609_curobo_controller.py`)
+  - pick/place: RMPFlow(`m0609_move_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`)
+- 그리퍼는 Isaac surface gripper입니다(`dual_surface_gripper_adapter.py`).
 
-## 💻 개발 환경 (Environment)
+**출력**: `m0609_ros_bridge.py`가 OmniGraph ROS 2 Bridge 노드를 만들어 토픽 입출력을 맡습니다. 대시보드(`dashboard_server.py`, FastAPI + WebSocket)는 다음 토픽을 받아 브라우저에 보여줍니다.
+- `/m0609/status`, `/m0609/tool_detection`, `/m0609/tool_command_result`
+- `/m0609/voice_log`, `/hand_tracking/image/compressed`
 
-- **OS:** Ubuntu 22.04 LTS (Jammy Jellyfish)
-- **Middleware:** ROS 2 Humble Hawksbill (`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, `ROS_DOMAIN_ID=137`)
-- **Simulator:** NVIDIA Isaac Sim 5.1
-- **Language:** Python 3.10 (모듈 venv) / Python 3.11 (Isaac 번들 — gripper)
-- **Key Libraries:** `rclpy`, `mediapipe`, `ultralytics`(YOLOv8), `openai-whisper`, `google-generativeai`, `cuRobo 0.7.8`, `fastapi`, `opencv-python`
+**현재 경로 / 실험·미사용**
 
-> ⚠️ **torch 는 반드시 cu128.** RTX 5080(Blackwell) 은 cu121 이하 빌드에서 동작하지 않습니다.
+| 구분 | 파일 |
+|---|---|
+| 현재 경로 | `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py` |
+| 실험·미사용 | `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`. `main.py`가 import하지 않습니다. |
 
----
+## 환경 · 장비
 
-## ⚙️ 사용 장비 (Hardware Setup)
+- 필요한 환경:
+  - Ubuntu 22.04, ROS 2 Humble(`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, `ROS_DOMAIN_ID=137`)
+  - Isaac Sim 5.1(번들 Python 3.11)
+  - 시스템 Python 3.10
+- GPU: NVIDIA GPU가 필요합니다. 개발 PC는 RTX 5080(Blackwell, 드라이버 580)이었습니다. **이 GPU는 torch cu128 빌드가 필요합니다**(cu121 이하는 동작하지 않음).
+- 장비: 웹캠 1대(손 추적)와 마이크 1개(음성). 로봇·그리퍼·도구 카메라는 모두 Isaac Sim 안의 가상 장비입니다.
 
-<!-- TODO: PC 실제 스펙으로 채워주세요 (CPU/GPU/RAM) -->
-- **PC:** CPU `_____` · GPU **NVIDIA RTX 5080** (드라이버 580) · RAM `_____`
-- 본 프로젝트는 **Doosan M0609 협동로봇 2대(A/B)** 기준으로 개발되었습니다.
+## 저장소 구성
 
-| Component | Type | Topic / Spec |
-|-----------|------|--------------|
-| Robot     | Doosan M0609 ×2 (6-DOF) | cuRobo / RMPFlow 모션 플래닝 |
-| Hand Input| 웹캠 + MediaPipe Hands | `/left_hand_*`, `/right_hand_*` |
-| Vision    | Isaac RGB 카메라 (Sim) | `/rgb` → `/m0609/tool_detection` |
-| Voice     | 마이크 + Whisper(small) | `/m0609/pick_command`, `/m0609/voice_log` |
-
----
-
-## 📦 의존성 설치 (Installation)
-
-**전제:** ① Ubuntu 22.04 + NVIDIA GPU 드라이버, ② ROS 2 Humble, ③ Isaac Sim 5.1 **만** 미리 설치돼 있으면
-나머지(cuRobo / mediapipe / whisper / torch / ultralytics …)는 스크립트가 전부 받습니다.
-
-### A. 자동 설치 (권장)
-```bash
-git clone <REPO_URL> surgical_robot_main
-cd surgical_robot_main
-./setup.sh          # 사전조건 점검 + 모듈별 venv + 의존성 + cuRobo(v0.7.8) 자동 설치
+```
+gripper_technique_test/      Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
+  doosan-robot2/urdf/        M0609 URDF
+  rmpflow/                   RMPFlow 설정·컨트롤러
+  scene_operating.zip.part-* 수술실 씬 분할 압축(GitHub 100MB 제한 때문)
+handtracking_final/          MediaPipe 손 추적 노드 + hand_landmarker.task
+voicellm/                    Whisper + Gemini 음성 명령 노드
+vision_detection_model/      YOLO 도구 인식 노드, best.pt, 트레이 ROI
+dashboard/                   FastAPI 서버 + static/index.html
+setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip 의존성 목록
 ```
 
-### B. 수동 설치 (요약)
+저장소에 포함되지 않은 것:
+- Isaac Sim 본체: 별도 설치가 필요합니다.
+- cuRobo: `install_curobo.sh`가 받습니다.
+- Gemini API 키: 환경변수 `GEMINI_API_KEY`로 넣습니다.
+
+## 설치
+
 ```bash
-# 1) 시스템(apt) 패키지
-sudo apt update
-sudo apt install -y python3-venv python3-pip ros-humble-cv-bridge v4l-utils ffmpeg libportaudio2
-
-# 2) venv (ROS 패키지가 보이게 --system-site-packages 필수)
-source /opt/ros/humble/setup.bash
-python3 -m venv --system-site-packages .venv && source .venv/bin/activate
-python -m pip install --upgrade pip setuptools wheel
-
-# 3) torch + torchvision 을 "먼저" cu128 로 (순서 중요)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
-python -c "import torch; print(torch.__version__, torch.cuda.is_available())"   # ...+cu128 True
-
-# 4) 나머지 pip 의존성
-pip install -r requirements.txt
-
-# 5) cuRobo (Isaac Python 에 v0.7.8)
-./install_curobo.sh
+git clone <this repo> && cd <repo>
+./setup.sh
 ```
 
-- 상세 의존성 명세: [requirements.txt](requirements.txt)
-- **Gemini API 키**(voicellm)는 코드/깃에 넣지 말고 **환경변수**로만 주입:
-  ```bash
-  export GEMINI_API_KEY="발급받은_키"
-  ```
+`setup.sh`가 하는 일:
+- [1] ROS·GPU·Isaac 경로 점검
+- [1-1] apt 패키지 설치
+- [1-2] 씬 조각을 합쳐 `gripper_technique_test/Collected_full_scene_operating/`로 복원
+- [2] 루트 `.venv` 생성(`--system-site-packages`) → torch cu128 먼저 설치 → `requirements.txt` 설치
+- [4] `install_curobo.sh`로 Isaac Python에 cuRobo v0.7.8 설치
 
----
-
-## 🗂️ 에셋 복원 (대용량 씬)
-
-> **📦 제출 zip(.zip)으로 받은 경우 → 이 단계 건너뛰세요.**
-> zip 안에는 씬 폴더(`Collected_full_scene_operating/`)가 **이미 압축 해제된 원본 그대로** 들어있어
-> 별도 복원이 필요 없습니다. 바로 [의존성 설치](#-의존성-설치-installation)로 가면 됩니다.
-
-**GitHub 에서 `git clone` 한 경우에만** 해당됩니다. 대용량 operating 씬(274MB)은
-GitHub 100MB 제한 때문에 **압축·분할(`scene_operating.zip.part-*`)** 로 올렸으므로, 클론 후 복원이 필요합니다.
-
-- **`./setup.sh` 를 돌리면 자동으로 복원됩니다** (별도 작업 불필요).
-- setup.sh 없이 수동 복원하려면:
-  ```bash
-  cd gripper_technique_test
-  cat scene_operating.zip.part-* > scene_operating.zip
-  unzip -q scene_operating.zip && rm scene_operating.zip
-  ls Collected_full_scene_operating/full_scene_backup.usda   # 확인
-  ```
-
----
-
-## 🚀 실행 순서 (How to Run)
-
-> ### ⚠️ STEP 0 — 최초 1번만 (안 하면 아래 전부 실패!)
-> ```bash
-> cd ~/Desktop/surgical_robot_main      # ← 본인이 clone/압축푼 경로로 수정
-> ./setup.sh                            # 루트 .venv 생성 + 의존성 설치 (몇 분, 한 번)
-> ```
-> 이걸 안 하면 `.venv` 가 없어서 아래 `source ../.venv/bin/activate` 가 **"그런 파일 없음"** 으로 전부 실패합니다.
->
-> **아래 각 터미널 블록을 통째로 복붙**하세요. 맨 앞 `cd ...surgical_robot_main` 의 **경로만 본인 환경에 맞게** 바꾸면 됩니다.
-> (터미널은 환경이 공유 안 되므로 블록마다 ROS 설정 + venv 활성화가 들어있습니다.)
-> - `source ../.venv/bin/activate` 후 프롬프트가 **`(.venv)`** 로 바뀌면 정상.
-> - **gripper(터미널 1)만 venv 불필요** — `run.sh` 가 Isaac `python.sh` + 도메인 설정까지 처리.
-
-### 1. Isaac Sim — 로봇/씬 (터미널 1) · venv 불필요
+씬을 손으로 복원할 때:
 ```bash
-cd ~/Desktop/surgical_robot_main/gripper_technique_test    # ← 본인 경로로 수정
-./run.sh                 # Isaac python.sh 로 실행 (venv·도메인 자동)
+cd gripper_technique_test
+cat scene_operating.zip.part-* > scene_operating.zip && unzip -q scene_operating.zip && rm scene_operating.zip
 ```
-- operating room 씬 로드 → 창이 열리면 **반드시 Play(▶)** 를 눌러야 ROS 2 Bridge / `/rgb` 동작.
-- 터미널에 `randomize` 입력 → 도구 4~6개 무작위 배치(로봇 정지 상태일 때).
 
-### 2. 손 추적 (터미널 2)
+torch는 반드시 cu128을 먼저 설치합니다. 순서가 바뀌면 ultralytics·whisper가 CPU판 torch를 끌어와 cu128을 덮을 수 있습니다(`setup.sh:135` 주석).
+
+## 실행
+
+모든 터미널에서 먼저 실행할 것:
 ```bash
-cd ~/Desktop/surgical_robot_main          # ← 본인이 clone/압축푼 경로로 수정
 source /opt/ros/humble/setup.bash
 export ROS_DOMAIN_ID=137 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-cd handtracking_final && source ../.venv/bin/activate    # (.venv) 떠야 정상
-python3 hand_trackerorigin.py             # 카메라 자동 탐색(CAMERA_SOURCE 기본 auto)
 ```
-- SPACE 로 30cm → 100cm 거리 캘리브레이션 후 시작.
+2~5번 터미널에서는 추가로 `source <repo>/.venv/bin/activate`를 실행합니다. 1번(Isaac)은 venv가 필요 없습니다.
 
-**참고 — 손추적 환경변수 (필요할 때만 앞에 붙여 실행)**
+| # | 위치 | 명령 | 정상이면 |
+|---|---|---|---|
+| 1 | `gripper_technique_test/` | `./run.sh` | Isaac 창에 수술실 씬이 뜹니다. **Play(▶)를 눌러야** 브리지와 `/rgb`가 동작합니다. |
+| 2 | `handtracking_final/` | `python3 hand_trackerorigin.py` | 카메라 창이 뜹니다. SPACE를 누르면 30 cm → 100 cm 거리 캘리브레이션이 시작됩니다. ESC/q로 종료합니다. |
+| 3 | `vision_detection_model/` | `python3 vision_tool_detection_node.py` | `/m0609/tool_detection` 발행 |
+| 4 | `voicellm/` | `GEMINI_API_KEY=... python3 voice_llm_model.py` | SPACE를 누르는 동안 녹음되고, 떼면 분류 결과가 나옵니다. |
+| 5 | `dashboard/` | `python3 dashboard_server.py` | `http://localhost:8137` 접속 |
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `CAMERA_SOURCE` | `auto` | 카메라 자동 탐색(0,1,2…). 고정하려면 번호 지정 (예: `CAMERA_SOURCE=4`). 번호는 `v4l2-ctl --list-devices` |
-| `MIRROR_VIEW` | `1` | 좌우 반전(셀카 모드). 손 좌표가 반대로 움직이면 `MIRROR_VIEW=0` |
-| `SWAP_HAND_LABELS` | `0` | 왼손/오른손 라벨이 바뀌어 보이면 `SWAP_HAND_LABELS=1` |
-| `PUBLISH_IMAGE` | `1` | 대시보드용 영상 발행. 끄려면 `0` |
-| `CAMERA_SCAN_MAX` | `6` | auto 탐색 시 훑을 최대 장치 번호 |
-
+음성 없이 테스트하는 명령:
 ```bash
-# 예: 특정 웹캠 고정 + 좌우반전 끄기 + 라벨 교환
-CAMERA_SOURCE=4 MIRROR_VIEW=0 SWAP_HAND_LABELS=1 python3 hand_trackerorigin.py
+ros2 topic pub --once /m0609/pick_command std_msgs/msg/String "{data: '메스'}"   # 메스 요청
+ros2 topic pub --once /m0609/return_recent std_msgs/msg/Empty "{}"              # 최근 작업 반납
+ros2 topic echo /m0609/tool_command_result                                     # 수락/거절 결과
 ```
 
-**카메라 설정 자세히**
+- 명령이 수락됐다고 해서 동작이 끝난 것은 아닙니다. 완료는 `/m0609/status` JSON의 `robots.<A|B>.state`가 `IDLE`로 돌아왔는지로 확인합니다(`robot_manager.py:1335`). 대시보드의 로봇 A/B 패널도 같은 값을 보여줍니다(`dashboard_server.py:133`).
+- 종료: 실물 장비가 없으므로 정리할 하드웨어는 없습니다. 각 터미널을 Ctrl+C로 끄고, Isaac 창을 닫습니다.
 
-- **auto 동작:** `CAMERA_SOURCE=auto`(기본)면 `0,1,2 … CAMERA_SCAN_MAX(기본 6)` 순서로 열어보며
-  **실제 프레임이 나오는 첫 장치**를 자동 선택합니다. 대부분 따로 지정할 필요 없습니다.
-- **내 카메라 번호 찾기:**
-  ```bash
-  v4l2-ctl --list-devices     # 장치명 ↔ /dev/videoN 매핑
-  ls -l /dev/video*           # 존재하는 카메라 노드
-  ```
-  여기서 나온 `/dev/videoN` 의 **N** 이 `CAMERA_SOURCE` 값입니다 (예: `/dev/video4` → `CAMERA_SOURCE=4`).
-- **노트북 내장캠 대신 USB 웹캠을 쓰고 싶을 때:** auto 가 내장캠(보통 0)을 먼저 잡으므로,
-  USB 캠 번호를 직접 지정하세요 (예: `CAMERA_SOURCE=4`).
-- **자주 겪는 문제**
-  - `Camera open failed` / 검은 화면 → 번호가 틀림. `v4l2-ctl --list-devices` 로 확인 후 지정.
-  - 다른 프로그램(Zoom/브라우저/비전 노드)이 **카메라를 점유** 중이면 안 열립니다 → 닫고 재실행.
-  - 권한 오류 → 사용자가 `video` 그룹에 있어야: `sudo usermod -aG video $USER` 후 재로그인.
-  - 한 대 카메라를 **손추적·YOLO 비전이 동시에** 쓰지 못합니다. 비전은 Isaac `/rgb`(시뮬 카메라)를
-    쓰므로 물리 웹캠과 충돌하지 않지만, 물리 웹캠을 두 노드가 같이 열면 충돌합니다.
-  - 해상도/FPS 조정: `DISPLAY_WIDTH`/`DISPLAY_HEIGHT`(표시), `INFERENCE_WIDTH`(추론 입력) 환경변수.
+자주 겪는 문제:
+- 토픽이 안 보이면 모든 터미널의 `ROS_DOMAIN_ID=137`을 확인합니다.
+- `/rgb`가 없으면 Isaac이 Play 상태인지 봅니다(`ros2 topic hz /rgb`).
+- 웹캠이 안 열리면 `CAMERA_SOURCE=<번호>`를 지정합니다. 번호는 `v4l2-ctl --list-devices`로 찾습니다. 손 추적의 다른 환경변수는 [handtracking_final/README.md](handtracking_final/README.md)에 있습니다.
+- voicellm이 바로 에러를 내면 `GEMINI_API_KEY`가 설정됐는지 봅니다.
+- voicellm에서 `coverage`·`numba` 오류가 나면 원인은 venv가 시스템 패키지를 끌어온 것입니다. venv 안에서 `pip install --upgrade "coverage>=7.4" "numba>=0.59" "llvmlite>=0.42"`로 해결합니다.
 
-### 3. YOLO 비전 (터미널 3)
-```bash
-cd ~/Desktop/surgical_robot_main          # ← 본인이 clone/압축푼 경로로 수정
-source /opt/ros/humble/setup.bash
-export ROS_DOMAIN_ID=137 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-cd vision_detection_model && source ../.venv/bin/activate   # (.venv) 떠야 정상
-python3 vision_tool_detection_node.py     # Isaac Play 상태 필요(/rgb)
-```
+## 검증
 
-### 4. 음성 명령 (터미널 4)
-```bash
-cd ~/Desktop/surgical_robot_main          # ← 본인이 clone/압축푼 경로로 수정
-source /opt/ros/humble/setup.bash
-export ROS_DOMAIN_ID=137 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-export GEMINI_API_KEY="여기에_발급받은_키_붙여넣기"   # ★ 필수! 본인 Gemini API 키로 교체
-cd voicellm && source ../.venv/bin/activate                # (.venv) 떠야 정상
-python3 voice_llm_model.py
-```
-> **Gemini API 키 발급:** https://aistudio.google.com/app/apikey → "Create API key" → 생성된 키를 위 `GEMINI_API_KEY` 에 붙여넣기.
-> 키는 **코드/깃에 넣지 말고 환경변수로만** 사용하세요. 매번 입력하기 싫으면 `~/.bashrc` 에 `export GEMINI_API_KEY="..."` 추가(단, 그 파일은 공유 금지).
+- 2026-09-23 기록: fresh clone에서 `setup.sh` [1-2] 씬 복원 블록을 실행했고, 복원 결과가 원본과 `diff -rq`로 같았습니다.
+- 자동 테스트는 없습니다.
+- 실기 성능 검증은 하지 않았습니다.
 
-### 5. 웹 대시보드 (선택)
-```bash
-cd ~/Desktop/surgical_robot_main          # ← 본인이 clone/압축푼 경로로 수정
-source /opt/ros/humble/setup.bash
-export ROS_DOMAIN_ID=137 RMW_IMPLEMENTATION=rmw_fastrtps_cpp
-cd dashboard && source ../.venv/bin/activate               # (.venv) 떠야 정상
-python3 dashboard_server.py               # http://localhost:8137
-```
+⚠️ 미검증(이 README 정리 시점에 실행하지 않은 것):
+- `setup.sh` 전체 설치 과정(apt, torch, cuRobo)
+- 5개 프로세스 동시 실행과 위 실행 표의 "정상이면" 서술. 이 서술은 코드와 기존 문서를 근거로 적었습니다.
 
-### CLI 직접 명령 (음성 없이 테스트)
-```bash
-ros2 topic pub --once /m0609/pick_command std_msgs/msg/String "{data: '메스'}"
-ros2 topic pub --once /m0609/return_recent std_msgs/msg/Empty "{}"
-ros2 topic echo /m0609/tool_command_result
-```
+## 한계 · 미완성
 
----
+- 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동, 실물 도구 인식은 다루지 않습니다.
+- 비-Isaac 모듈 4개는 pip로 설치한 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 씁니다. rclpy·cv_bridge(apt)와 같은 프로세스에 섞이는 구성이라, 환경에 따라 버전이 충돌할 수 있습니다(위 coverage/numba 문제가 그 사례).
+- `setup.sh`에 Isaac 경로 자동 탐색이 들어 있습니다. `$HOME` 아래를 `find`로 뒤지므로(`setup.sh:77`, `run.sh:23`) `ISAAC_SIM_PATH`를 직접 지정하는 편이 빠릅니다.
+- 도구 6종의 이름 매핑은 코드 여러 곳(음성·대시보드·Isaac)에 따로 들어 있습니다. 한 곳을 바꾸면 나머지도 맞춰야 합니다.
 
-## 📡 주요 ROS 2 토픽
+## License
 
-| 토픽 | 타입 | 방향 |
-|------|------|------|
-| `/left_hand_*`, `/right_hand_*` | Point/String/Quaternion | handtracking → Isaac |
-| `/m0609/pick_command`, `/m0609/return_tool` | String (도구명) | voice/CLI → Isaac |
-| `/m0609/return_recent` | Empty | voice/CLI → Isaac |
-| `/m0609/tool_command_result` | String(JSON) | Isaac → 외부 |
-| `/m0609/status` | String(JSON) | Isaac → dashboard |
-| `/rgb` | Image | Isaac → vision |
-| `/m0609/tool_detection` | String(JSON) | vision → dashboard |
-| `/hand_tracking/image/compressed` | CompressedImage | handtracking → dashboard |
+이 저장소에는 License를 부여하지 않았습니다(All rights reserved). 포함된 upstream 코드와 자산(Doosan URDF, MediaPipe 모델, Isaac Sim 자산, cuRobo, Ultralytics 등)은 각 원본의 LICENSE를 따릅니다.
 
----
+## 더 읽을 문서
 
-## 🧯 트러블슈팅
-
-- **토픽 안 보임** → 모든 터미널 `ROS_DOMAIN_ID=137` 동일 확인.
-- **`/rgb` 없음** → Isaac 이 Play 상태인지 (`ros2 topic hz /rgb`).
-- **웹캠 안 열림** → `CAMERA_SOURCE` 인덱스 확인(`v4l2-ctl --list-devices`).
-- **voicellm 즉시 에러** → `GEMINI_API_KEY` 미설정.
-- **voicellm 에서 `module 'coverage' has no attribute 'types'` / numba 오류** →
-  `--system-site-packages` venv 가 시스템의 구버전 coverage/numba 를 끌어와 충돌하는 것.
-  venv 활성화 후 최신으로 덮어쓰면 해결 (requirements.txt 에 이미 포함됨):
-  ```bash
-  source ~/Desktop/surgical_robot_main/.venv/bin/activate
-  pip install --upgrade "coverage>=7.4" "numba>=0.59" "llvmlite>=0.42"
-  ```
-- **torch CPU판** → cu128 로 재설치(`pip install torch torchvision --index-url .../cu128`).
-
-## 🔒 보안 메모
-- API 키·비밀값은 **환경변수로만** 사용. 코드/깃 하드코딩 금지(`.gitignore` 차단 규칙 포함).
+| 문서 | 내용 | 지위 |
+|---|---|---|
+| 이 README | 전체 흐름·설치·실행 | 정본 |
+| [gripper_technique_test/README.md](gripper_technique_test/README.md) | Isaac 메인의 상태·명령 세부 | 세부·참고(코드와 대조하지 않음) |
+| [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부·참고 |
+| [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부·참고 |
+| [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부·참고 |
