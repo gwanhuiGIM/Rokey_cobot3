@@ -1,10 +1,9 @@
 # Dual M0609 수술도구 전달 시뮬레이션 (Isaac Sim · ROS 2)
 
-> 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 이 저장소의 개인 변경은 README 정리, clone 복원용 scene 자산 분할 업로드, 백업 URDF 삭제입니다.
+> 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 공개하면서 README를 정리하고, clone만으로 씬을 복원할 수 있게 scene 자산을 분할해 올리고, 백업 URDF를 지웠습니다(개인 변경).
 
 **Isaac Sim 5.1 시뮬레이션 전용** 프로젝트입니다. 가상 수술실에서 Doosan M0609 두 대가 수술도구 6종을 트레이에서 집어 집도의 손 위치로 가져다주고, 반납·교체·취소 요청도 처리합니다.
 명령은 손 동작(MediaPipe), 음성(Whisper + Gemini), 웹 대시보드 클릭으로 냅니다. 트레이별 도구 유무는 YOLO가 시뮬레이터 카메라 영상에서 인식합니다.
-실물 로봇·그리퍼 구동 코드는 없습니다. 실물 환경에서 도구를 준비하거나 환경을 모사하지도 않았습니다.
 
 > **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나(`gripper_technique_test/main.py`)에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
@@ -38,7 +37,7 @@
 **인식**
 - 손: `hand_trackerorigin.py`가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
 - 음성: `voice_llm_model.py`가 Whisper `small`로 받아 적고, Gemini로 요청과 반납 의도를 가릅니다.
-- 비전: `vision_tool_detection_node.py`가 Isaac `/rgb`를 `weights/best.pt`(YOLO)와 `tray_rois.json`(트레이 ROI)으로 판정해 `/m0609/tool_detection`(JSON)을 발행합니다. ROI는 `tray_roi_calibrator.py`로 다시 잡습니다. 카메라나 트레이 배치를 바꾸면 다시 해야 합니다.
+- 비전: `vision_tool_detection_node.py`가 Isaac 카메라 영상(`/rgb`)에서 YOLO(`weights/best.pt`)로 도구를 검출하고, 트레이 ROI(`tray_rois.json`)별 결과를 `/m0609/tool_detection`(JSON)으로 발행합니다. 카메라나 트레이 배치가 바뀌면 `tray_roi_calibrator.py`로 ROI를 새로 잡습니다.
 
 **판단**: `robot_manager.py`가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
 - 1순위는 선호 로봇입니다. 짝수 트레이는 A, 홀수 트레이는 B입니다.
@@ -74,13 +73,6 @@ stateDiagram-v2
 - `/m0609/status`, `/m0609/tool_detection`, `/m0609/tool_command_result`
 - `/m0609/voice_log`, `/hand_tracking/image/compressed`
 
-**현재 경로 / 실험·미사용**
-
-| 구분 | 파일 |
-|---|---|
-| 현재 경로 | `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py` |
-| 실험·미사용 | `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`. `main.py`가 import하지 않습니다. |
-
 ## 환경 · 장비
 
 - 필요한 환경:
@@ -109,6 +101,8 @@ setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip �
 - cuRobo: `install_curobo.sh`가 받습니다.
 - Gemini API 키: 환경변수 `GEMINI_API_KEY`로 넣습니다.
 
+실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`입니다. `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
+
 ## 설치
 
 ```bash
@@ -117,11 +111,11 @@ git clone <this repo> && cd <repo>
 ```
 
 `setup.sh`가 하는 일:
-- [1] ROS·GPU·Isaac 경로 점검
-- [1-1] apt 패키지 설치
-- [1-2] 씬 조각을 합쳐 `gripper_technique_test/Collected_full_scene_operating/`로 복원
-- [2] 루트 `.venv` 생성(`--system-site-packages`) → torch cu128 먼저 설치 → `requirements.txt` 설치
-- [4] `install_curobo.sh`로 Isaac Python에 cuRobo v0.7.8 설치
+- ROS·GPU·Isaac 경로 점검
+- apt 패키지 설치
+- 씬 조각을 합쳐 `gripper_technique_test/Collected_full_scene_operating/`로 복원
+- 루트 `.venv` 생성(`--system-site-packages`) → torch cu128 먼저 설치 → `requirements.txt` 설치
+- `install_curobo.sh`로 Isaac Python에 cuRobo v0.7.8 설치
 
 씬을 손으로 복원할 때:
 ```bash
@@ -167,20 +161,22 @@ ros2 topic echo /m0609/tool_command_result                                     #
 
 ## 검증
 
-- 2026-09-23 기록: fresh clone에서 `setup.sh` [1-2] 씬 복원 블록을 실행했고, 복원 결과가 원본과 `diff -rq`로 같았습니다.
-- 자동 테스트는 없습니다.
-- 실기 성능 검증은 하지 않았습니다.
-
-⚠️ 미검증(이 README 정리 시점에 실행하지 않은 것):
-- `setup.sh` 전체 설치 과정(apt, torch, cuRobo)
-- 5개 프로세스 동시 실행과 위 실행 표의 "정상이면" 서술. 이 서술은 코드와 기존 문서를 근거로 적었습니다.
+- 2026-09-23 기록(재실행하지 않음): fresh clone에서 `setup.sh`의 씬 복원 블록을 실행했고, 결과가 원본과 `diff -rq`로 같았습니다.
+- 자동 테스트는 없고, 실기 성능 검증도 하지 않았습니다.
+- `setup.sh` 전체 설치(apt·torch·cuRobo)와 5개 프로세스 동시 실행은 미검증입니다. 실행 표의 "정상이면" 열은 코드와 기존 문서를 근거로 적었습니다.
 
 ## 한계 · 미완성
 
-- 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동, 실물 도구 인식은 다루지 않습니다.
-- 비-Isaac 모듈 4개는 pip로 설치한 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 씁니다. rclpy·cv_bridge(apt)와 같은 프로세스에 섞이는 구성이라, 환경에 따라 버전이 충돌할 수 있습니다(위 coverage/numba 문제가 그 사례).
-- `setup.sh`에 Isaac 경로 자동 탐색이 들어 있습니다. `$HOME` 아래를 `find`로 뒤지므로(`setup.sh:77`, `run.sh:23`) `ISAAC_SIM_PATH`를 직접 지정하는 편이 빠릅니다.
+- 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동 코드와 실물 도구 인식은 없고, 실물 환경을 준비하거나 모사하지도 않았습니다.
+- Isaac Sim 본체·cuRobo·Gemini API 키는 저장소에 없어 따로 준비해야 합니다([저장소 구성](#저장소-구성)).
+- 비-Isaac 모듈 4개는 pip판 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 apt판 rclpy·cv_bridge와 함께 씁니다. 환경에 따라 버전이 충돌할 수 있습니다(위 coverage/numba 문제가 그 사례).
+- `ISAAC_SIM_PATH`를 지정하지 않으면 `setup.sh`·`run.sh`가 `$HOME` 아래를 `find`로 뒤집니다(`setup.sh:77`, `run.sh:23`). 직접 지정하는 편이 빠릅니다.
+
+<details><summary>유지보수 메모</summary>
+
 - 도구 6종의 이름 매핑은 코드 여러 곳(음성·대시보드·Isaac)에 따로 들어 있습니다. 한 곳을 바꾸면 나머지도 맞춰야 합니다.
+
+</details>
 
 ## License
 
@@ -188,10 +184,10 @@ ros2 topic echo /m0609/tool_command_result                                     #
 
 ## 더 읽을 문서
 
-| 문서 | 내용 | 지위 |
+| 문서 | 내용 | 용도 |
 |---|---|---|
-| 이 README | 전체 흐름·설치·실행 | 정본 |
-| [gripper_technique_test/README.md](gripper_technique_test/README.md) | Isaac 메인의 상태·명령 세부 | 세부·참고(코드와 대조하지 않음) |
-| [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부·참고 |
-| [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부·참고 |
-| [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부·참고 |
+| 이 README | 전체 흐름·설치·실행 | 먼저 읽기 |
+| [gripper_technique_test/README.md](gripper_technique_test/README.md) | Isaac 메인의 상태·명령 세부 | 세부 참고(코드와 대조하지 않음) |
+| [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부 참고 |
+| [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부 참고 |
+| [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부 참고 |
