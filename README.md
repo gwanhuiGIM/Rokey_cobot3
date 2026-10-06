@@ -5,6 +5,8 @@
 **Isaac Sim 5.1 시뮬레이션 전용** 프로젝트입니다. 가상 수술실에서 Doosan M0609 두 대가 수술도구 6종을 트레이에서 집어 집도의 손 위치로 가져다주고, 반납·교체·취소 요청도 처리합니다.
 명령은 손 동작(MediaPipe), 음성(Whisper + Gemini), 웹 대시보드 클릭으로 냅니다. 트레이별 도구 유무는 YOLO가 시뮬레이터 카메라 영상에서 인식합니다.
 
+![Isaac Sim 가상 수술실: Doosan M0609 두 대와 수술도구 트레이](docs/images/isaac_operating_room_scene.jpg)
+
 > **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나(`gripper_technique_test/main.py`)에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
 ```
@@ -30,6 +32,8 @@
 | 손바닥이 카메라를 향한 주먹 1.5초 유지(FOLLOW) / 손등이 카메라를 향한 편 손 1.5초 유지(PLACE) | 도구를 든 로봇이 TRACKING 상태에서 손을 따라가다가 PLACE 제스처에서 반납 시작 |
 | Isaac 터미널에 `randomize` 입력 | 도구 4~6개를 무작위 트레이에 재배치(`tool_state_manager.py:205`). 요청 즉시가 아니라 코드가 안전하다고 판단한 시점에 적용 |
 
+![손 추적 화면: 손바닥이 카메라를 향한 주먹(FOLLOW), 로봇 목표 위치는 손보다 20 cm 위](docs/images/hand_tracking_follow.jpg)
+
 도구 6종: 메스 · 캘리퍼 · 클램프 · 망치 · 톱 · 봉합바늘 (`voicellm/voice_llm_model.py:39`).
 
 ## 시스템 구조
@@ -38,6 +42,8 @@
 - 손: `hand_trackerorigin.py`가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
 - 음성: `voice_llm_model.py`가 Whisper `small`로 받아 적고, Gemini로 요청과 반납 의도를 가릅니다.
 - 비전: `vision_tool_detection_node.py`가 Isaac 카메라 영상(`/rgb`)에서 YOLO(`weights/best.pt`)로 도구를 검출하고, 트레이 ROI(`tray_rois.json`)별 결과를 `/m0609/tool_detection`(JSON)으로 발행합니다. 카메라나 트레이 배치가 바뀌면 `tray_roi_calibrator.py`로 ROI를 새로 잡습니다.
+
+![왼쪽: Isaac Sim 수술실 씬, 오른쪽: 카메라 영상에서 YOLO가 트레이별로 도구를 검출한 결과](docs/images/yolo_tray_detection.jpg)
 
 **판단**: `robot_manager.py`가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
 - 1순위는 선호 로봇입니다. 짝수 트레이는 A, 홀수 트레이는 B입니다.
@@ -72,6 +78,8 @@ stateDiagram-v2
 **출력**: `m0609_ros_bridge.py`가 OmniGraph ROS 2 Bridge 노드를 만들어 토픽 입출력을 맡습니다. 대시보드(`dashboard_server.py`, FastAPI + WebSocket)는 다음 토픽을 받아 브라우저에 보여줍니다.
 - `/m0609/status`, `/m0609/tool_detection`, `/m0609/tool_command_result`
 - `/m0609/voice_log`, `/hand_tracking/image/compressed`
+
+![웹 대시보드: 손추적 영상, 트레이별 도구 상태, 로봇 A/B 상태, 음성 로그, 명령 로그](docs/images/web_dashboard.jpg)
 
 ## 환경 · 장비
 
