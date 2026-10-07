@@ -2,6 +2,8 @@
 
 > 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 공개하면서 README를 정리하고, clone만으로 씬을 복원할 수 있게 scene 자산을 분할해 올리고, 백업 URDF를 지웠습니다(개인 변경).
 
+> ▶️ **[1분 시연 영상](https://youtu.be/EUDn9btPNTw)** — 이 프로젝트를 가장 빨리 파악할 수 있는 자료입니다. 참고 문서는 [더 읽을 문서](#더-읽을-문서), 본인 담당은 [프로젝트 요약](#contribution)에 있습니다.
+
 **Isaac Sim 5.1 시뮬레이션 전용** 프로젝트입니다. 가상 수술실에서 Doosan M0609 두 대가 수술도구 6종을 트레이에서 집어 집도의 손 위치로 가져다주고, 반납·교체·취소 요청도 처리합니다.
 명령은 손 동작(MediaPipe), 음성(Whisper + Gemini), 웹 대시보드 클릭으로 냅니다. 트레이별 도구 유무는 YOLO가 시뮬레이터 카메라 영상에서 인식합니다.
 
@@ -22,6 +24,34 @@
      └── /m0609/status, tool_command_result, tool_detection ── vision_detection_model/vision_tool_detection_node.py (YOLO)
 ```
 
+<a id="contribution"></a>
+## 프로젝트 요약 · 본인 담당 (김관희)
+
+> 포트폴리오용 프로젝트 요약입니다. 이 저장소의 코드는 팀 최종 제출본이고, 제 역할 범위는 **본인 담당** 행에 적었습니다. 접힌 '프로젝트 기술 전체'는 팀 전체 시스템 설명입니다. 다른 프로젝트: [github.com/gwanhuiGIM](https://github.com/gwanhuiGIM)
+
+**집도의의 손 동작·음성 명령으로 두 협동로봇이 수술도구를 전달하는 Isaac Sim 시뮬레이션을 구현하였습니다.**<br>
+이 과정에서 두 로봇의 작업 단계와 트레이별 수술도구 재고, 손추적 영상, 음성·명령 로그를 한 화면에서 실시간으로 확인하는 웹 대시보드를 만들었습니다.
+
+Dual Doosan M0609 · NVIDIA Isaac Sim · 팀 프로젝트 · ROKEY 1차 (26.06.17~26.06.30)
+**본인 담당:** 웹 대시보드 UI·상호작용
+
+- **개요:** 집도의의 손 동작·음성으로 이중 협동로봇이 수술도구 6종을 전달하는 시뮬레이션
+- **핵심 행동:** 트레이 재고·로봇 점유 상태를 SVG로 시각화, 관련 상태가 바뀔 때만 다시 그려 화면 떨림 방지
+
+<details>
+<summary><b>프로젝트 기술 전체 · 코드 근거</b></summary>
+
+- **손 동작 텔레오퍼레이션:** MediaPipe로 양손 위치·회전·제스처를 추적해 로봇 끝단 목표로 변환, FOLLOW/PLACE/WAITING 제스처 모드
+- **음성 명령:** Whisper STT → Gemini가 도구 6종으로 분류, 가장 가까운 로봇이 해당 트레이로 이동해 전달·반납
+- **비전:** Isaac Sim 카메라 영상에서 YOLOv8로 트레이별 도구/빈칸 인식, 로봇 보유 상태와 융합해 MISSING 판정, 도구 무작위 배치로 검증
+- **작업 관리:** 두 로봇 작업 분배(가까운 로봇 우선), 교체·반납·PICK 도중 취소·중복 요청 방지
+- **웹 대시보드:** FastAPI + WebSocket으로 손추적 영상·트레이 상태·로봇 상태·음성/명령 로그·Robot Map 실시간 표시
+- **코드 근거:** [SVG 아이콘 — `index.html`](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L167-L186) · [상태 변경 시에만 재렌더링](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L275-L280)
+
+</details>
+
+개인 개발본: [Personal_cobot3_ws](https://github.com/gwanhuiGIM/Personal_cobot3_ws)
+
 ## 무엇을 할 수 있나
 
 | 사용자가 하는 일 | 시스템이 하는 일 |
@@ -38,12 +68,17 @@
 
 ## 시스템 구조
 
+![왼쪽: Isaac Sim 수술실 씬, 오른쪽: 카메라 영상에서 YOLO가 트레이별로 도구를 검출한 결과](docs/images/yolo_tray_detection.jpg)
+
+![웹 대시보드: 손추적 영상, 트레이별 도구 상태, 로봇 A/B 상태, 음성 로그, 명령 로그](docs/images/web_dashboard.jpg)
+
+<details>
+<summary>인식 · 판단 · 제어(상태머신) · 출력 세부</summary>
+
 **인식**
 - 손: `hand_trackerorigin.py`가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
 - 음성: `voice_llm_model.py`가 Whisper `small`로 받아 적고, Gemini로 요청과 반납 의도를 가릅니다.
 - 비전: `vision_tool_detection_node.py`가 Isaac 카메라 영상(`/rgb`)에서 YOLO(`weights/best.pt`)로 도구를 검출하고, 트레이 ROI(`tray_rois.json`)별 결과를 `/m0609/tool_detection`(JSON)으로 발행합니다. 카메라나 트레이 배치가 바뀌면 `tray_roi_calibrator.py`로 ROI를 새로 잡습니다.
-
-![왼쪽: Isaac Sim 수술실 씬, 오른쪽: 카메라 영상에서 YOLO가 트레이별로 도구를 검출한 결과](docs/images/yolo_tray_detection.jpg)
 
 **판단**: `robot_manager.py`가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
 - 1순위는 선호 로봇입니다. 짝수 트레이는 A, 홀수 트레이는 B입니다.
@@ -79,7 +114,30 @@ stateDiagram-v2
 - `/m0609/status`, `/m0609/tool_detection`, `/m0609/tool_command_result`
 - `/m0609/voice_log`, `/hand_tracking/image/compressed`
 
-![웹 대시보드: 손추적 영상, 트레이별 도구 상태, 로봇 A/B 상태, 음성 로그, 명령 로그](docs/images/web_dashboard.jpg)
+</details>
+
+## 한계 · 미완성
+
+- 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동 코드와 실물 도구 인식은 없고, 실물 환경을 준비하거나 모사하지도 않았습니다.
+- Isaac Sim 본체·cuRobo·Gemini API 키는 저장소에 없어 따로 준비해야 합니다([저장소 구성](#저장소-구성)).
+- 비-Isaac 모듈 4개는 pip판 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 apt판 rclpy·cv_bridge와 함께 씁니다. 환경에 따라 버전이 충돌할 수 있습니다(아래 실행 절의 coverage/numba 문제가 그 사례).
+- `ISAAC_SIM_PATH`를 지정하지 않으면 `setup.sh`·`run.sh`가 `$HOME` 아래를 `find`로 뒤집니다(`setup.sh:77`, `run.sh:23`). 직접 지정하는 편이 빠릅니다.
+
+<details><summary>유지보수 메모</summary>
+
+- 도구 6종의 이름 매핑은 코드 여러 곳(음성·대시보드·Isaac)에 따로 들어 있습니다. 한 곳을 바꾸면 나머지도 맞춰야 합니다.
+
+</details>
+
+## 더 읽을 문서
+
+| 문서 | 내용 | 용도 |
+|---|---|---|
+| 이 README | 전체 흐름·설치·실행 | 먼저 읽기 |
+| [gripper_technique_test/README.md](gripper_technique_test/README.md) | Isaac 메인의 상태·명령 세부 | 세부 참고(코드와 대조하지 않음) |
+| [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부 참고 |
+| [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부 참고 |
+| [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부 참고 |
 
 ## 환경 · 장비
 
@@ -91,6 +149,9 @@ stateDiagram-v2
 - 장비: 웹캠 1대(손 추적)와 마이크 1개(음성). 로봇·그리퍼·도구 카메라는 모두 Isaac Sim 안의 가상 장비입니다.
 
 ## 저장소 구성
+
+<details>
+<summary>디렉터리 구성 · 저장소에 없는 것</summary>
 
 ```
 gripper_technique_test/      Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
@@ -111,7 +172,12 @@ setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip �
 
 실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`입니다. `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
 
+</details>
+
 ## 설치
+
+<details>
+<summary>설치 절차 (setup.sh · 씬 복원)</summary>
 
 ```bash
 git clone <this repo> && cd <repo>
@@ -133,7 +199,12 @@ cat scene_operating.zip.part-* > scene_operating.zip && unzip -q scene_operating
 
 torch는 반드시 cu128을 먼저 설치합니다. 순서가 바뀌면 ultralytics·whisper가 CPU판 torch를 끌어와 cu128을 덮을 수 있습니다(`setup.sh:135` 주석).
 
+</details>
+
 ## 실행
+
+<details>
+<summary>실행 절차 · 자주 겪는 문제</summary>
 
 모든 터미널에서 먼저 실행할 것:
 ```bash
@@ -167,65 +238,14 @@ ros2 topic echo /m0609/tool_command_result                                     #
 - voicellm이 바로 에러를 내면 `GEMINI_API_KEY`가 설정됐는지 봅니다.
 - voicellm에서 `coverage`·`numba` 오류가 나면 원인은 venv가 시스템 패키지를 끌어온 것입니다. venv 안에서 `pip install --upgrade "coverage>=7.4" "numba>=0.59" "llvmlite>=0.42"`로 해결합니다.
 
+</details>
+
 ## 검증
 
 - 2026-09-23 기록(재실행하지 않음): fresh clone에서 `setup.sh`의 씬 복원 블록을 실행했고, 결과가 원본과 `diff -rq`로 같았습니다.
 - 자동 테스트는 없고, 실기 성능 검증도 하지 않았습니다.
 - `setup.sh` 전체 설치(apt·torch·cuRobo)와 5개 프로세스 동시 실행은 미검증입니다. 실행 표의 "정상이면" 열은 코드와 기존 문서를 근거로 적었습니다.
 
-## 한계 · 미완성
-
-- 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동 코드와 실물 도구 인식은 없고, 실물 환경을 준비하거나 모사하지도 않았습니다.
-- Isaac Sim 본체·cuRobo·Gemini API 키는 저장소에 없어 따로 준비해야 합니다([저장소 구성](#저장소-구성)).
-- 비-Isaac 모듈 4개는 pip판 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 apt판 rclpy·cv_bridge와 함께 씁니다. 환경에 따라 버전이 충돌할 수 있습니다(위 coverage/numba 문제가 그 사례).
-- `ISAAC_SIM_PATH`를 지정하지 않으면 `setup.sh`·`run.sh`가 `$HOME` 아래를 `find`로 뒤집니다(`setup.sh:77`, `run.sh:23`). 직접 지정하는 편이 빠릅니다.
-
-<details><summary>유지보수 메모</summary>
-
-- 도구 6종의 이름 매핑은 코드 여러 곳(음성·대시보드·Isaac)에 따로 들어 있습니다. 한 곳을 바꾸면 나머지도 맞춰야 합니다.
-
-</details>
-
-<a id="contribution"></a>
-## 프로젝트 요약 · 본인 담당 (김관희)
-
-> 포트폴리오용 프로젝트 요약입니다. 이 저장소의 코드는 팀 최종 제출본이고, 제 역할 범위는 **본인 담당** 행에 적었습니다. 접힌 '프로젝트 기술 전체'는 팀 전체 시스템 설명입니다. 다른 프로젝트: [github.com/gwanhuiGIM](https://github.com/gwanhuiGIM)
-
-**집도의의 손 동작·음성 명령으로 두 협동로봇이 수술도구를 전달하는 Isaac Sim 시뮬레이션을 구현하였습니다.**<br>
-이 과정에서 두 로봇의 작업 단계와 트레이별 수술도구 재고, 손추적 영상, 음성·명령 로그를 한 화면에서 실시간으로 확인하는 웹 대시보드를 만들었습니다.
-
-▶️ [1분 시연 영상](https://youtu.be/EUDn9btPNTw)
-
-Dual Doosan M0609 · NVIDIA Isaac Sim · 팀 프로젝트 · ROKEY 1차 (26.06.17~26.06.30)
-**본인 담당:** 웹 대시보드 UI·상호작용
-
-- **개요:** 집도의의 손 동작·음성으로 이중 협동로봇이 수술도구 6종을 전달하는 시뮬레이션
-- **핵심 행동:** 트레이 재고·로봇 점유 상태를 SVG로 시각화, 관련 상태가 바뀔 때만 다시 그려 화면 떨림 방지
-
-<details>
-<summary><b>프로젝트 기술 전체 · 코드 근거</b></summary>
-
-- **손 동작 텔레오퍼레이션:** MediaPipe로 양손 위치·회전·제스처를 추적해 로봇 끝단 목표로 변환, FOLLOW/PLACE/WAITING 제스처 모드
-- **음성 명령:** Whisper STT → Gemini가 도구 6종으로 분류, 가장 가까운 로봇이 해당 트레이로 이동해 전달·반납
-- **비전:** Isaac Sim 카메라 영상에서 YOLOv8로 트레이별 도구/빈칸 인식, 로봇 보유 상태와 융합해 MISSING 판정, 도구 무작위 배치로 검증
-- **작업 관리:** 두 로봇 작업 분배(가까운 로봇 우선), 교체·반납·PICK 도중 취소·중복 요청 방지
-- **웹 대시보드:** FastAPI + WebSocket으로 손추적 영상·트레이 상태·로봇 상태·음성/명령 로그·Robot Map 실시간 표시
-- **코드 근거:** [SVG 아이콘 — `index.html`](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L167-L186) · [상태 변경 시에만 재렌더링](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L275-L280)
-
-</details>
-
-개인 개발본: [Personal_cobot3_ws](https://github.com/gwanhuiGIM/Personal_cobot3_ws)
-
 ## License
 
 이 저장소에는 License를 부여하지 않았습니다(All rights reserved). 포함된 upstream 코드와 자산(Doosan URDF, MediaPipe 모델, Isaac Sim 자산, cuRobo, Ultralytics 등)은 각 원본의 LICENSE를 따릅니다.
-
-## 더 읽을 문서
-
-| 문서 | 내용 | 용도 |
-|---|---|---|
-| 이 README | 전체 흐름·설치·실행 | 먼저 읽기 |
-| [gripper_technique_test/README.md](gripper_technique_test/README.md) | Isaac 메인의 상태·명령 세부 | 세부 참고(코드와 대조하지 않음) |
-| [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부 참고 |
-| [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부 참고 |
-| [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부 참고 |
