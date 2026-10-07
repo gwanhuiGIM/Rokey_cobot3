@@ -2,7 +2,7 @@
 
 > 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 공개하면서 README를 정리하고, clone만으로 씬을 복원할 수 있게 scene 자산을 분할해 올리고, 백업 URDF를 지웠습니다(개인 변경).
 
-> ▶️ **[1분 시연 영상](https://youtu.be/EUDn9btPNTw)** — 이 프로젝트를 가장 빨리 파악할 수 있는 자료입니다. 참고 문서는 [더 읽을 문서](#더-읽을-문서), 본인 담당은 [프로젝트 요약](#contribution)에 있습니다.
+> ▶️ **[1분 시연 영상](https://youtu.be/EUDn9btPNTw)** · 📄 **[발표 자료(PDF)](https://github.com/gwanhuiGIM/Rokey_cobot3/releases/download/presentation/cobot3_presentation.pdf)** — 이 프로젝트를 가장 빨리 파악할 수 있는 자료입니다. 참고 문서는 [더 읽을 문서](#더-읽을-문서), 본인 담당은 [프로젝트 요약](#contribution)에 있습니다.
 
 **Isaac Sim 5.1 시뮬레이션 전용** 프로젝트입니다. 가상 수술실에서 Doosan M0609 두 대가 수술도구 6종을 트레이에서 집어 집도의 손 위치로 가져다주고, 반납·교체·취소 요청도 처리합니다.
 명령은 손 동작(MediaPipe), 음성(Whisper + Gemini), 웹 대시보드 클릭으로 냅니다. 트레이별 도구 유무는 YOLO가 시뮬레이터 카메라 영상에서 인식합니다.
