@@ -2,7 +2,7 @@
 
 > 두산로보틱스 ROKEY 부트캠프 팀 프로젝트의 제출 스냅샷입니다. 공개하면서 README를 정리하고, clone만으로 씬을 복원할 수 있게 scene 자산을 분할해 올리고, 백업 URDF를 지웠습니다(개인 변경).
 
-> ▶️ **[1분 시연 영상](https://youtu.be/EUDn9btPNTw)** — 이 프로젝트를 가장 빨리 파악할 수 있는 자료입니다. 참고 문서는 [더 읽을 문서](#더-읽을-문서), 본인 담당은 [프로젝트 요약](#contribution)에 있습니다.
+> ▶️ **[1분 시연 영상](https://youtu.be/EUDn9btPNTw)** — 이 프로젝트를 가장 빨리 파악할 수 있는 자료입니다. 참고 문서는 [더 읽을 문서](#더-읽을-문서)에 있습니다.
 >
 > 📄 [발표 자료(PDF, 66쪽)](https://github.com/gwanhuiGIM/Rokey_cobot3/releases/download/presentation/cobot3_presentation.pdf) — 세부 기술 발표 자료
 
@@ -26,33 +26,40 @@
      └── /m0609/status, tool_command_result, tool_detection ── vision_detection_model/vision_tool_detection_node.py (YOLO)
 ```
 
-<a id="contribution"></a>
-## 프로젝트 요약 · 본인 담당 (김관희)
+## 환경 · 장비
 
-> 포트폴리오용 프로젝트 요약입니다. 이 저장소의 코드는 팀 최종 제출본이고, 제 역할 범위는 **본인 담당** 행에 적었습니다. 접힌 '프로젝트 기술 전체'는 팀 전체 시스템 설명입니다. 다른 프로젝트: [github.com/gwanhuiGIM](https://github.com/gwanhuiGIM)
+- 필요한 환경:
+  - Ubuntu 22.04, ROS 2 Humble(`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, `ROS_DOMAIN_ID=137`)
+  - Isaac Sim 5.1(번들 Python 3.11)
+  - 시스템 Python 3.10
+- GPU: NVIDIA GPU가 필요합니다. 개발 PC는 RTX 5080(Blackwell, 드라이버 580)이었습니다. **이 GPU는 torch cu128 빌드가 필요합니다**(cu121 이하는 동작하지 않음).
+- 장비: 웹캠 1대(손 추적)와 마이크 1개(음성). 로봇·그리퍼·도구 카메라는 모두 Isaac Sim 안의 가상 장비입니다.
 
-**집도의의 손 동작·음성 명령으로 두 협동로봇이 수술도구를 전달하는 Isaac Sim 시뮬레이션을 구현하였습니다.**<br>
-이 과정에서 두 로봇의 작업 단계와 트레이별 수술도구 재고, 손추적 영상, 음성·명령 로그를 한 화면에서 실시간으로 확인하는 웹 대시보드를 만들었습니다.
-
-Dual Doosan M0609 · NVIDIA Isaac Sim · 팀 프로젝트 · ROKEY 1차 (26.06.17~26.06.30)
-**본인 담당:** 웹 대시보드 UI·상호작용
-
-- **개요:** 집도의의 손 동작·음성으로 이중 협동로봇이 수술도구 6종을 전달하는 시뮬레이션
-- **핵심 행동:** 트레이 재고·로봇 점유 상태를 SVG로 시각화, 관련 상태가 바뀔 때만 다시 그려 화면 떨림 방지
+## 저장소 구성
 
 <details>
-<summary><b>프로젝트 기술 전체 · 코드 근거</b></summary>
+<summary>디렉터리 구성 · 저장소에 없는 것</summary>
 
-- **손 동작 텔레오퍼레이션:** MediaPipe로 양손 위치·회전·제스처를 추적해 로봇 끝단 목표로 변환, FOLLOW/PLACE/WAITING 제스처 모드
-- **음성 명령:** Whisper STT → Gemini가 도구 6종으로 분류, 가장 가까운 로봇이 해당 트레이로 이동해 전달·반납
-- **비전:** Isaac Sim 카메라 영상에서 YOLOv8로 트레이별 도구/빈칸 인식, 로봇 보유 상태와 융합해 MISSING 판정, 도구 무작위 배치로 검증
-- **작업 관리:** 두 로봇 작업 분배(가까운 로봇 우선), 교체·반납·PICK 도중 취소·중복 요청 방지
-- **웹 대시보드:** FastAPI + WebSocket으로 손추적 영상·트레이 상태·로봇 상태·음성/명령 로그·Robot Map 실시간 표시
-- **코드 근거:** [SVG 아이콘 — `index.html`](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L167-L186) · [상태 변경 시에만 재렌더링](https://github.com/gwanhuiGIM/Rokey_cobot3/blob/main/dashboard/static/index.html#L275-L280)
+```
+gripper_technique_test/      Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
+  doosan-robot2/urdf/        M0609 URDF
+  rmpflow/                   RMPFlow 설정·컨트롤러
+  scene_operating.zip.part-* 수술실 씬 분할 압축(GitHub 100MB 제한 때문)
+handtracking_final/          MediaPipe 손 추적 노드 + hand_landmarker.task
+voicellm/                    Whisper + Gemini 음성 명령 노드
+vision_detection_model/      YOLO 도구 인식 노드, best.pt, 트레이 ROI
+dashboard/                   FastAPI 서버 + static/index.html
+setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip 의존성 목록
+```
+
+저장소에 포함되지 않은 것:
+- Isaac Sim 본체: 별도 설치가 필요합니다.
+- cuRobo: `install_curobo.sh`가 받습니다.
+- Gemini API 키: 환경변수 `GEMINI_API_KEY`로 넣습니다.
+
+실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`입니다. `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
 
 </details>
-
-개인 개발본: [Personal_cobot3_ws](https://github.com/gwanhuiGIM/Personal_cobot3_ws)
 
 ## 무엇을 할 수 있나
 
@@ -140,41 +147,6 @@ stateDiagram-v2
 | [handtracking_final/README.md](handtracking_final/README.md) | 손 추적 환경변수·캘리브레이션 | 세부 참고 |
 | [vision_detection_model/README.md](vision_detection_model/README.md) | YOLO·ROI 캘리브레이션 | 세부 참고 |
 | [dashboard/README.md](dashboard/README.md) | 대시보드 실행·환경변수 | 세부 참고 |
-
-## 환경 · 장비
-
-- 필요한 환경:
-  - Ubuntu 22.04, ROS 2 Humble(`RMW_IMPLEMENTATION=rmw_fastrtps_cpp`, `ROS_DOMAIN_ID=137`)
-  - Isaac Sim 5.1(번들 Python 3.11)
-  - 시스템 Python 3.10
-- GPU: NVIDIA GPU가 필요합니다. 개발 PC는 RTX 5080(Blackwell, 드라이버 580)이었습니다. **이 GPU는 torch cu128 빌드가 필요합니다**(cu121 이하는 동작하지 않음).
-- 장비: 웹캠 1대(손 추적)와 마이크 1개(음성). 로봇·그리퍼·도구 카메라는 모두 Isaac Sim 안의 가상 장비입니다.
-
-## 저장소 구성
-
-<details>
-<summary>디렉터리 구성 · 저장소에 없는 것</summary>
-
-```
-gripper_technique_test/      Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
-  doosan-robot2/urdf/        M0609 URDF
-  rmpflow/                   RMPFlow 설정·컨트롤러
-  scene_operating.zip.part-* 수술실 씬 분할 압축(GitHub 100MB 제한 때문)
-handtracking_final/          MediaPipe 손 추적 노드 + hand_landmarker.task
-voicellm/                    Whisper + Gemini 음성 명령 노드
-vision_detection_model/      YOLO 도구 인식 노드, best.pt, 트레이 ROI
-dashboard/                   FastAPI 서버 + static/index.html
-setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip 의존성 목록
-```
-
-저장소에 포함되지 않은 것:
-- Isaac Sim 본체: 별도 설치가 필요합니다.
-- cuRobo: `install_curobo.sh`가 받습니다.
-- Gemini API 키: 환경변수 `GEMINI_API_KEY`로 넣습니다.
-
-실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`입니다. `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
-
-</details>
 
 ## 설치
 
