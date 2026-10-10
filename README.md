@@ -11,7 +11,7 @@
 
 ![Isaac Sim 가상 수술실: Doosan M0609 두 대와 수술도구 트레이](docs/images/isaac_operating_room_scene.jpg)
 
-> **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나(`gripper_technique_test/main.py`)에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
+> **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나([`gripper_technique_test/main.py`](gripper_technique_test/main.py))에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
 ```mermaid
 flowchart LR
@@ -49,27 +49,38 @@ _주제별 바로가기입니다. 본문 배치 순서와 다를 수 있습니�
 
 ## 저장소 구성
 
+**핵심 코드 바로가기**
+
+| 파일 | 하는 일 | 설명 위치 |
+|---|---|---|
+| ⭐ **[`gripper_technique_test/main.py`](gripper_technique_test/main.py)** | Isaac Sim 씬·로봇 2대·컨트롤러·매니저를 조립하고 시뮬레이션 루프를 돌림 | [핵심 설계](#dual-m0609-수술도구-전달-시뮬레이션-isaac-sim--ros-2) |
+| **[`gripper_technique_test/robot_manager.py`](gripper_technique_test/robot_manager.py)** | 요청 도구의 트레이를 찾아 로봇을 배정하고 반납·교체·취소를 처리 | [시스템 구조](#시스템-구조) |
+| **[`gripper_technique_test/m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py)** | 로봇별 pick → transport → TRACKING → place 상태머신 | [시스템 구조](#시스템-구조) |
+| **[`gripper_technique_test/m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py)** | OmniGraph ROS 2 Bridge로 손·명령 토픽 입력과 status JSON 출력 | [시스템 구조](#시스템-구조) |
+| **[`handtracking_final/hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py)** | MediaPipe 양손 추적과 FOLLOW/PLACE 제스처 판정 | [시스템 구조](#시스템-구조) |
+
 <details>
 <summary>디렉터리 구성 · 저장소에 없는 것</summary>
 
 ```
-gripper_technique_test/      Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
+gripper_technique_test/      ★ Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
   doosan-robot2/urdf/        M0609 URDF
   rmpflow/                   RMPFlow 설정·컨트롤러
   scene_operating.zip.part-* 수술실 씬 분할 압축(GitHub 100MB 제한 때문)
-handtracking_final/          MediaPipe 손 추적 노드 + hand_landmarker.task
+handtracking_final/          ★ MediaPipe 손 추적 노드 + hand_landmarker.task
 voicellm/                    Whisper + Gemini 음성 명령 노드
 vision_detection_model/      YOLO 도구 인식 노드, best.pt, 트레이 ROI
 dashboard/                   FastAPI 서버 + static/index.html
 setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip 의존성 목록
+★ = 위 "핵심 코드 바로가기" 파일이 있는 곳
 ```
 
 저장소에 포함되지 않은 것:
 - Isaac Sim 본체: 별도 설치가 필요합니다.
-- cuRobo: `install_curobo.sh`가 받습니다.
+- cuRobo: [`install_curobo.sh`](install_curobo.sh)가 받습니다.
 - Gemini API 키: 환경변수 `GEMINI_API_KEY`로 넣습니다.
 
-실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, `rmpflow/m0609_rmpflow_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`입니다. `hand_marker_visualizer.py`, `temp_dynamic_trays.py`, `rmpflow/m0609_pick_place_controller.py`는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
+실행 경로는 `main.py`가 import하는 `gripper_technique_test/*.py`, [`rmpflow/m0609_rmpflow_controller.py`](gripper_technique_test/rmpflow/m0609_rmpflow_controller.py), [`rmpflow/m0609_pick_place_controller_surface.py`](gripper_technique_test/rmpflow/m0609_pick_place_controller_surface.py)입니다. [`hand_marker_visualizer.py`](gripper_technique_test/hand_marker_visualizer.py), [`temp_dynamic_trays.py`](gripper_technique_test/temp_dynamic_trays.py), [`rmpflow/m0609_pick_place_controller.py`](gripper_technique_test/rmpflow/m0609_pick_place_controller.py)는 실험·미사용 파일로, `main.py`가 import하지 않습니다.
 
 </details>
 
@@ -81,11 +92,11 @@ setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip �
 | "그거 아니야", "클램프 반납해" | 직전 요청 정정이면 `/m0609/return_recent`, 대상이 분명하면 `/m0609/return_tool` |
 | 대시보드에서 트레이 클릭 | 같은 pick/return 토픽 발행, 결과(`/m0609/tool_command_result`)를 명령 로그로 표시 |
 | 손바닥이 카메라를 향한 주먹 1.5초 유지(FOLLOW) / 손등이 카메라를 향한 편 손 1.5초 유지(PLACE) | 도구를 든 로봇이 TRACKING 상태에서 손을 따라가다가 PLACE 제스처에서 반납 시작 |
-| Isaac 터미널에 `randomize` 입력 | 도구 4~6개를 무작위 트레이에 재배치(`tool_state_manager.py:205`). 요청 즉시가 아니라 코드가 안전하다고 판단한 시점에 적용 |
+| Isaac 터미널에 `randomize` 입력 | 도구 4~6개를 무작위 트레이에 재배치([`tool_state_manager.py:205`](gripper_technique_test/tool_state_manager.py#L205)). 요청 즉시가 아니라 코드가 안전하다고 판단한 시점에 적용 |
 
 ![손 추적 화면: 손바닥이 카메라를 향한 주먹(FOLLOW), 로봇 목표 위치는 손보다 20 cm 위](docs/images/hand_tracking_follow.jpg)
 
-도구 6종: 메스 · 캘리퍼 · 클램프 · 망치 · 톱 · 봉합바늘 (`voicellm/voice_llm_model.py:39`).
+도구 6종: 메스 · 캘리퍼 · 클램프 · 망치 · 톱 · 봉합바늘 ([`voicellm/voice_llm_model.py:39`](voicellm/voice_llm_model.py#L39)).
 
 ## 시스템 구조
 
@@ -97,17 +108,17 @@ setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip �
 <summary>인식 · 판단 · 제어(상태머신) · 출력 세부</summary>
 
 **인식**
-- 손: `hand_trackerorigin.py`가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
+- 손: [`hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py)가 MediaPipe로 양손 위치·방향·제스처를 추적해 손 좌표와 모드(`FOLLOW`/`PLACE`/`WAITING`)를 발행합니다. 모드는 같은 제스처를 1.5초 유지해야 바뀝니다(`GESTURE_HOLD_SEC`, `:82`). 주먹+손바닥이 카메라 방향이면 FOLLOW, 편 손+손등이 카메라 방향이면 PLACE입니다(`:831-853`). 로봇 목표 위치는 손보다 20 cm 위입니다(`EE_Z_OFFSET = 0.20`, `:69`).
 - 음성: `voice_llm_model.py`가 Whisper `small`로 받아 적고, Gemini로 요청과 반납 의도를 가릅니다.
-- 비전: `vision_tool_detection_node.py`가 Isaac 카메라 영상(`/rgb`)에서 YOLO(`weights/best.pt`)로 도구를 검출하고, 트레이 ROI(`tray_rois.json`)별 결과를 `/m0609/tool_detection`(JSON)으로 발행합니다. 카메라나 트레이 배치가 바뀌면 `tray_roi_calibrator.py`로 ROI를 새로 잡습니다.
+- 비전: [`vision_tool_detection_node.py`](vision_detection_model/vision_tool_detection_node.py)가 Isaac 카메라 영상(`/rgb`)에서 YOLO(`weights/best.pt`)로 도구를 검출하고, 트레이 ROI(`tray_rois.json`)별 결과를 `/m0609/tool_detection`(JSON)으로 발행합니다. 카메라나 트레이 배치가 바뀌면 [`tray_roi_calibrator.py`](vision_detection_model/tray_roi_calibrator.py)로 ROI를 새로 잡습니다.
 
-**판단**: `robot_manager.py`가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
+**판단**: [`robot_manager.py`](gripper_technique_test/robot_manager.py)가 요청 도구가 있는 트레이를 찾아 로봇을 고릅니다.
 - 1순위는 선호 로봇입니다. 짝수 트레이는 A, 홀수 트레이는 B입니다.
 - 2순위는 트레이까지의 거리입니다(`robot_manager.py:256-268`).
 - 작업을 받을 수 없는 로봇은 후보에서 뺍니다.
 - 교체·특정 반납·최근 작업 반납·중복 요청 처리도 여기서 합니다.
 
-**제어**: 로봇마다 `m0609_state_machine.py` 상태머신이 하나씩 돕니다.
+**제어**: 로봇마다 [`m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py) 상태머신이 하나씩 돕니다.
 
 ```mermaid
 stateDiagram-v2
@@ -127,11 +138,11 @@ stateDiagram-v2
 - 반납·취소 요청은 상태에 따라 다르게 처리됩니다(`request_cancel_and_return_from_manager`, `:412`). 도구를 아직 안 집었으면 바로 홈으로 가고, 들고 있으면 PLACE를 거칩니다.
 - 그 밖의 상태에서는 요청을 거절하고 이유를 문자열로 돌려줍니다.
 - 모션 플래너는 상태마다 다릅니다.
-  - TRACKING: cuRobo 0.7.8(`m0609_tracking_controller.py` → `m0609_curobo_controller.py`)
-  - pick/place: RMPFlow(`m0609_move_controller.py`, `rmpflow/m0609_pick_place_controller_surface.py`)
-- 그리퍼는 Isaac surface gripper입니다(`dual_surface_gripper_adapter.py`).
+  - TRACKING: cuRobo 0.7.8([`m0609_tracking_controller.py`](gripper_technique_test/m0609_tracking_controller.py) → [`m0609_curobo_controller.py`](gripper_technique_test/m0609_curobo_controller.py))
+  - pick/place: RMPFlow([`m0609_move_controller.py`](gripper_technique_test/m0609_move_controller.py), `rmpflow/m0609_pick_place_controller_surface.py`)
+- 그리퍼는 Isaac surface gripper입니다([`dual_surface_gripper_adapter.py`](gripper_technique_test/dual_surface_gripper_adapter.py)).
 
-**출력**: `m0609_ros_bridge.py`가 OmniGraph ROS 2 Bridge 노드를 만들어 토픽 입출력을 맡습니다. 대시보드(`dashboard_server.py`, FastAPI + WebSocket)는 다음 토픽을 받아 브라우저에 보여줍니다.
+**출력**: [`m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py)가 OmniGraph ROS 2 Bridge 노드를 만들어 토픽 입출력을 맡습니다. 대시보드([`dashboard_server.py`](dashboard/dashboard_server.py), FastAPI + WebSocket)는 다음 토픽을 받아 브라우저에 보여줍니다.
 - `/m0609/status`, `/m0609/tool_detection`, `/m0609/tool_command_result`
 - `/m0609/voice_log`, `/hand_tracking/image/compressed`
 
@@ -142,7 +153,7 @@ stateDiagram-v2
 - 시뮬레이션 전용입니다. 실물 M0609·그리퍼 구동 코드와 실물 도구 인식은 없고, 실물 환경을 준비하거나 모사하지도 않았습니다.
 - Isaac Sim 본체·cuRobo·Gemini API 키는 저장소에 없어 따로 준비해야 합니다([저장소 구성](#저장소-구성)).
 - 비-Isaac 모듈 4개는 pip판 `opencv-python`·`numpy`를 `--system-site-packages` venv에서 apt판 rclpy·cv_bridge와 함께 씁니다. 환경에 따라 버전이 충돌할 수 있습니다(아래 실행 절의 coverage/numba 문제가 그 사례).
-- `ISAAC_SIM_PATH`를 지정하지 않으면 `setup.sh`·`run.sh`가 `$HOME` 아래를 `find`로 뒤집니다(`setup.sh:77`, `run.sh:23`). 직접 지정하는 편이 빠릅니다.
+- `ISAAC_SIM_PATH`를 지정하지 않으면 [`setup.sh`](setup.sh)·[`run.sh`](gripper_technique_test/run.sh)가 `$HOME` 아래를 `find`로 뒤집니다(`setup.sh:77`, `run.sh:23`). 직접 지정하는 편이 빠릅니다.
 
 <details><summary>유지보수 메모</summary>
 
