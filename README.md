@@ -13,17 +13,21 @@
 
 > **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나(`gripper_technique_test/main.py`)에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
-```
-[웹캠] → handtracking_final/hand_trackerorigin.py ─ /left|right_hand_* ───────────┐
-[마이크] → voicellm/voice_llm_model.py ─ /m0609/pick_command, return_tool, ───────┤
-                                         return_recent                            ▼
-[브라우저] ⇄ dashboard/dashboard_server.py ─ (같은 명령 토픽) ──→ gripper_technique_test/main.py (Isaac Sim)
-     ▲                                                              OmniGraph ROS 2 Bridge(토픽 I/O)
-     │                                                              robot_manager → 로봇 A/B 상태머신
-     │                                                              cuRobo(TRACKING) · RMPFlow(pick/place)
-     │                                                                    │ /rgb
-     │                                                                    ▼
-     └── /m0609/status, tool_command_result, tool_detection ── vision_detection_model/vision_tool_detection_node.py (YOLO)
+```mermaid
+flowchart LR
+    CAM["웹캠"] --> HT["handtracking_final/<br/>hand_trackerorigin.py"]
+    MIC["마이크"] --> VL["voicellm/<br/>voice_llm_model.py"]
+    WB["브라우저"] <--> DB["dashboard/<br/>dashboard_server.py"]
+    HT -->|"/left|right_hand_*"| ISAAC
+    VL -->|"/m0609/pick_command<br/>return_tool, return_recent"| ISAAC
+    DB -->|"같은 명령 토픽"| ISAAC
+    subgraph ISAAC["gripper_technique_test/main.py (Isaac Sim)"]
+        OG["OmniGraph ROS 2 Bridge (토픽 I/O)"]
+        RM["robot_manager → 로봇 A/B 상태머신"]
+        PL["cuRobo (TRACKING) · RMPFlow (pick/place)"]
+    end
+    ISAAC -->|"/rgb"| VD["vision_detection_model/<br/>vision_tool_detection_node.py (YOLO)"]
+    VD -->|"/m0609/status<br/>tool_command_result, tool_detection"| DB
 ```
 
 ## 목차
