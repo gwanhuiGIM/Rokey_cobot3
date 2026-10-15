@@ -47,19 +47,6 @@ _주제별 바로가기입니다. 본문 배치 순서와 다를 수 있습니�
 
 ## 저장소 구성
 
-**핵심 코드 바로가기**
-
-| 파일 | 하는 일 | 설명 위치 |
-|---|---|---|
-| ⭐ **[`gripper_technique_test/main.py`](gripper_technique_test/main.py)** | Isaac Sim 씬·로봇 2대·컨트롤러·매니저를 조립하고 시뮬레이션 루프를 돌림 | [핵심 설계](#dual-m0609-수술도구-전달-시뮬레이션-isaac-sim--ros-2) |
-| **[`gripper_technique_test/robot_manager.py`](gripper_technique_test/robot_manager.py)** | 요청 도구의 트레이를 찾아 로봇을 배정하고 반납·교체·취소를 처리 | [시스템 구조](#시스템-구조) |
-| **[`gripper_technique_test/m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py)** | 로봇별 pick → transport → TRACKING → place 상태머신 | [시스템 구조](#시스템-구조) |
-| **[`gripper_technique_test/m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py)** | OmniGraph ROS 2 Bridge로 손·명령 토픽 입력과 status JSON 출력 | [시스템 구조](#시스템-구조) |
-| **[`handtracking_final/hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py)** | MediaPipe 양손 추적과 FOLLOW/PLACE 제스처 판정 | [시스템 구조](#시스템-구조) |
-
-<details>
-<summary>디렉터리 구성 · 저장소에 없는 것</summary>
-
 ```
 gripper_technique_test/      ★ Isaac Sim 메인: 씬·로봇 2대·상태머신·ROS 브리지 (run.sh로 실행)
   doosan-robot2/urdf/        M0609 URDF
@@ -70,8 +57,24 @@ voicellm/                    Whisper + Gemini 음성 명령 노드
 vision_detection_model/      YOLO 도구 인식 노드, best.pt, 트레이 ROI
 dashboard/                   FastAPI 서버 + static/index.html
 setup.sh · install_curobo.sh · requirements.txt   설치 스크립트와 pip 의존성 목록
-★ = 위 "핵심 코드 바로가기" 파일이 있는 곳
+★ = 아래 "핵심 코드 바로가기" 파일이 있는 곳
 ```
+
+<details>
+<summary>핵심 코드 바로가기</summary>
+
+| 파일 | 하는 일 | 설명 위치 |
+|---|---|---|
+| ⭐ **[`gripper_technique_test/main.py`](gripper_technique_test/main.py)** | Isaac Sim 씬·로봇 2대·컨트롤러·매니저를 조립하고 시뮬레이션 루프를 돌림 | [핵심 설계](#dual-m0609-수술도구-전달-시뮬레이션-isaac-sim--ros-2) |
+| **[`gripper_technique_test/robot_manager.py`](gripper_technique_test/robot_manager.py)** | 요청 도구의 트레이를 찾아 로봇을 배정하고 반납·교체·취소를 처리 | [시스템 구조](#시스템-구조) |
+| **[`gripper_technique_test/m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py)** | 로봇별 pick → transport → TRACKING → place 상태머신 | [시스템 구조](#시스템-구조) |
+| **[`gripper_technique_test/m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py)** | OmniGraph ROS 2 Bridge로 손·명령 토픽 입력과 status JSON 출력 | [시스템 구조](#시스템-구조) |
+| **[`handtracking_final/hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py)** | MediaPipe 양손 추적과 FOLLOW/PLACE 제스처 판정 | [시스템 구조](#시스템-구조) |
+
+</details>
+
+<details>
+<summary>저장소에 없는 것</summary>
 
 저장소에 포함되지 않은 것:
 - Isaac Sim 본체: 별도 설치가 필요합니다.
