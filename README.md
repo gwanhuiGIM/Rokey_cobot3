@@ -11,8 +11,11 @@
 
 > **핵심 설계**: 로봇 제어와 시뮬레이션은 Isaac Sim 프로세스 하나([`gripper_technique_test/main.py`](gripper_technique_test/main.py))에 모았습니다. 손 추적·음성·비전·대시보드는 별도 프로세스로 띄우고 ROS 2 토픽(`ROS_DOMAIN_ID=137`)으로만 연결합니다. Isaac 번들 Python(3.11)과 시스템 Python(3.10)을 섞지 않으려고 코드상 이렇게 나눴습니다.
 
+<details>
+<summary>시스템 구성도</summary>
+
 ```mermaid
-flowchart LR
+flowchart TB
     CAM["웹캠"] --> HT["handtracking_final/<br/>hand_trackerorigin.py"]
     MIC["마이크"] --> VL["voicellm/<br/>voice_llm_model.py"]
     WB["브라우저"] <--> DB["dashboard/<br/>dashboard_server.py"]
@@ -27,6 +30,8 @@ flowchart LR
     ISAAC -->|"/rgb"| VD["vision_detection_model/<br/>vision_tool_detection_node.py (YOLO)"]
     VD -->|"/m0609/status<br/>tool_command_result, tool_detection"| DB
 ```
+
+</details>
 
 ## 목차
 
