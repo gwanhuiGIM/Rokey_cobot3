@@ -39,7 +39,7 @@ flowchart TB
 | 손 위치 · 제스처 추적 | [`handtracking_final/hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py) | 발행 `/left_hand_*` `/right_hand_*` (raw · xyz · mode · orient) |
 | 음성 명령 해석 | [`voicellm/voice_llm_model.py`](voicellm/voice_llm_model.py) | 발행 `/m0609/pick_command` `/m0609/return_tool` `/m0609/return_recent` |
 | 대시보드 서버 | [`dashboard/dashboard_server.py`](dashboard/dashboard_server.py) | 발행 위와 같은 명령 토픽 · 구독 `/m0609/status` `/m0609/tool_detection` `/m0609/tool_command_result` |
-| 시뮬레이션 | 진입점 [`gripper_technique_test/main.py`](gripper_technique_test/main.py), 토픽 입출력 [`m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py), 작업 배정 [`robot_manager.py`](gripper_technique_test/robot_manager.py), 로봇 상태머신 [`m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py) | 구독 명령 · 손 토픽 · 발행 `/m0609/status` `/m0609/tool_command_result` · 씬 카메라 `/rgb` |
+| 시뮬레이션 | 진입점 [`gripper_technique_test/main.py`](gripper_technique_test/main.py), 토픽 입출력 [`m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py), 작업 배정 · 명령 수락/거절 판단 [`robot_manager.py`](gripper_technique_test/robot_manager.py), 로봇 상태머신 [`m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py) | 구독 명령 · 손 토픽 · 발행 `/m0609/status` `/m0609/tool_command_result` · 씬 카메라 `/rgb` |
 | 트레이 도구 인식 | [`vision_detection_model/vision_tool_detection_node.py`](vision_detection_model/vision_tool_detection_node.py) | 구독 `/rgb` · 발행 `/m0609/tool_detection` |
 
 </details>
