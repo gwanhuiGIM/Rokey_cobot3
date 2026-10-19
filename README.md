@@ -14,22 +14,33 @@
 <details>
 <summary>시스템 구성도</summary>
 
+칸은 하는 일, 화살표는 주고받는 내용입니다. 노드·토픽 이름과 코드 위치는 그림 아래 표에 있습니다.
+
 ```mermaid
 flowchart TB
-    CAM["웹캠"] --> HT["handtracking_final/<br/>hand_trackerorigin.py"]
-    MIC["마이크"] --> VL["voicellm/<br/>voice_llm_model.py"]
-    WB["브라우저"] <--> DB["dashboard/<br/>dashboard_server.py"]
-    HT -->|"/left|right_hand_*"| ISAAC
-    VL -->|"/m0609/pick_command<br/>return_tool, return_recent"| ISAAC
-    DB -->|"같은 명령 토픽"| ISAAC
-    subgraph ISAAC["gripper_technique_test/main.py (Isaac Sim)"]
-        OG["OmniGraph ROS 2 Bridge (토픽 I/O)"]
-        RM["robot_manager → 로봇 A/B 상태머신"]
-        PL["cuRobo (TRACKING) · RMPFlow (pick/place)"]
+    CAM["웹캠"] --> HT["손 위치 · 제스처 추적"]
+    MIC["마이크"] --> VL["음성 명령 해석 (LLM)"]
+    WB["브라우저"] <--> DB["대시보드 서버"]
+    HT -->|"양손 위치 · 모드"| ISAAC
+    VL -->|"도구 가져오기 · 반납 명령"| ISAAC
+    DB -->|"같은 명령 (버튼)"| ISAAC
+    subgraph ISAAC["시뮬레이션 (Isaac Sim)"]
+        OG["ROS 2 토픽 입출력"]
+        RM["로봇 A/B 작업 배정 · 상태머신"]
+        PL["경로 계획<br/>손 따라가기 cuRobo · 집기/놓기 RMPFlow"]
     end
-    ISAAC -->|"/rgb"| VD["vision_detection_model/<br/>vision_tool_detection_node.py (YOLO)"]
-    VD -->|"/m0609/status<br/>tool_command_result, tool_detection"| DB
+    ISAAC -->|"시뮬레이션 카메라 영상"| VD["트레이 도구 인식 (YOLO)"]
+    VD -->|"트레이별 도구 · 빈칸"| DB
+    ISAAC -->|"로봇 · 트레이 상태, 명령 결과"| DB
 ```
+
+| 칸 | 코드 | 주고받는 토픽 |
+|---|---|---|
+| 손 위치 · 제스처 추적 | [`handtracking_final/hand_trackerorigin.py`](handtracking_final/hand_trackerorigin.py) | 발행 `/left_hand_*` `/right_hand_*` (raw · xyz · mode · orient) |
+| 음성 명령 해석 | [`voicellm/voice_llm_model.py`](voicellm/voice_llm_model.py) | 발행 `/m0609/pick_command` `/m0609/return_tool` `/m0609/return_recent` |
+| 대시보드 서버 | [`dashboard/dashboard_server.py`](dashboard/dashboard_server.py) | 발행 위와 같은 명령 토픽 · 구독 `/m0609/status` `/m0609/tool_detection` `/m0609/tool_command_result` |
+| 시뮬레이션 | 진입점 [`gripper_technique_test/main.py`](gripper_technique_test/main.py), 토픽 입출력 [`m0609_ros_bridge.py`](gripper_technique_test/m0609_ros_bridge.py), 작업 배정 [`robot_manager.py`](gripper_technique_test/robot_manager.py), 로봇 상태머신 [`m0609_state_machine.py`](gripper_technique_test/m0609_state_machine.py) | 구독 명령 · 손 토픽 · 발행 `/m0609/status` `/m0609/tool_command_result` · 씬 카메라 `/rgb` |
+| 트레이 도구 인식 | [`vision_detection_model/vision_tool_detection_node.py`](vision_detection_model/vision_tool_detection_node.py) | 구독 `/rgb` · 발행 `/m0609/tool_detection` |
 
 </details>
 
