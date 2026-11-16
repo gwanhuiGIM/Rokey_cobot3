@@ -50,7 +50,7 @@ flowchart TB
 
 - **시스템 구조 설계**: 팀장으로서 전체 시스템 구조 설계를 맡았습니다. 지금의 구조(Isaac Sim 프로세스 하나에 로봇 제어·시뮬레이션, 나머지 모듈은 별도 프로세스로 ROS 2 토픽 연결)는 위 [핵심 설계](#dual-m0609-수술도구-전달-시뮬레이션-isaac-sim--ros-2) 단락과 시스템 구성도에 있습니다.
 - **트레이 도구 인식(비전) 설계**: 코드로는 [`vision_detection_model/vision_tool_detection_node.py`](vision_detection_model/vision_tool_detection_node.py)가 맡는 부분입니다. 이 노드는 Isaac 카메라 토픽 `/rgb`를 구독해 YOLO 가중치로 검출하고, 검출 결과를 `tray_rois.json`에 정의된 트레이 구역 6칸에 대응시켜 트레이별 도구·빈칸을 `/m0609/tool_detection`(JSON)으로 발행합니다.
-- **합성 데이터 생성·YOLO 파인튜닝(데이터 생성 본인 제안·진행, 학습 참여)**: 위 노드가 읽는 가중치 [`vision_detection_model/weights/best.pt`](vision_detection_model/weights/best.pt)가 이 작업의 결과물입니다. Isaac Sim Replicator(학습 이미지 자동 생성 도구)로 씬에 놓인 도구 3D 모델과 트레이 환경을 담은 합성 이미지를 만들고, 사전학습된 YOLO를 그 이미지로 파인튜닝했습니다. 처음에는 오픈소스 실물 수술도구 사진으로 학습한 모델을 썼는데, 시뮬레이터 속 도구를 제대로 찾지 못해 학습 데이터를 바꿨습니다. 생성·학습 코드는 이 저장소에 없습니다.
+- **합성 데이터 생성·YOLO 파인튜닝(데이터 생성 본인 제안·진행, 학습 참여)**: 위 노드가 읽는 가중치 [`vision_detection_model/weights/best.pt`](vision_detection_model/weights/best.pt)는 이 합성 데이터로 학습한 모델이며, 최종 학습은 본인 작업이 아닙니다. Isaac Sim Replicator(학습 이미지 자동 생성 도구)로 씬에 놓인 도구 3D 모델과 트레이 환경을 담은 합성 이미지를 만들고, 그 이미지로 사전학습된 YOLO를 파인튜닝하는 Colab 학습을 진행했습니다. 처음에는 오픈소스 실물 수술도구 사진으로 학습한 모델을 썼는데, 시뮬레이터 속 도구를 제대로 찾지 못해 학습 데이터를 바꿨습니다. 생성·학습 코드는 이 저장소에 없습니다.
 - **ROS 2 환경 구성·연결**: 각 프로세스가 같은 ROS 2 환경에서 토픽을 주고받도록 구성했습니다. 공통 설정(`ROS_DOMAIN_ID=137`, `RMW_IMPLEMENTATION=rmw_fastrtps_cpp`)은 [실행](#실행), 토픽 목록은 시스템 구성도 아래 표에 있습니다.
 
 ## 목차
